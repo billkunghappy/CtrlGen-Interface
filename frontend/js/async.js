@@ -29,6 +29,7 @@ async function startSession(accessCode) {
         session.top_p,
         session.presence_penalty,
         session.frequency_penalty,
+        // session.model_list,
       );
 
       stop = session.stop;
@@ -37,6 +38,8 @@ async function startSession(accessCode) {
   } catch(e) {
     alert('Start sesion error:' + e);
     console.log(e);
+    session = await wwai.api.startSession(domain, accessCode);
+    console.log(session)
   } finally {
     updateCounter();
     stopBlinking();
@@ -255,6 +258,7 @@ async function loadLogsWithSessionId(newSessionId){
       config['top_p'],
       config['presence_penalty'],
       config['frequency_penalty'],
+      // config['model_list'],
     );
     stop = config['stop'];
     engine = config['engine'];
@@ -305,7 +309,7 @@ async function saveLogs() {
 // Query
 ////////////////////////////////////////////////////////////////////////////////
 
-function getDataForQuery(doc, exampleText) {
+function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
   const data = {
     'session_id': sessionId,
     'domain': domain,
@@ -313,6 +317,8 @@ function getDataForQuery(doc, exampleText) {
     'example_text': exampleText, // $('#exampleTextarea').val()
 
     'doc': doc,
+    'cursor_index': cursor_index,
+    'cursor_length': cursor_length,
 
     'n': $("#ctrl-n").val(),
     'max_tokens': $("#ctrl-max_tokens").val(),
@@ -321,25 +327,32 @@ function getDataForQuery(doc, exampleText) {
     'presence_penalty': $("#ctrl-presence_penalty").val(),
     'frequency_penalty': $("#ctrl-frequency_penalty").val(),
     'stop': stop,
-
+    // Model and Our Control Signal
+    'model': $("#ctrl-model").val(),
+    'keyword': $("#ctrl-keyword").val(),
+    'length_unit': $("#ctrl-length_unit").val(),
+    'length': $("#ctrl-length").val(),
+    'instruct': $("#ctrl-instruct").val(),
     'engine': engine,
 
     'suggestions': getSuggestionState(),
   };
-
+  // console.log("GetDataForQuery");
   return data;
 }
 
 function queryGPT3() {
   const doc = getText();
+  // get the selected range
+  let range = quill.getSelection();;
   const exampleText = exampleActualText;
-  const data = getDataForQuery(doc, exampleText);
+  const data = getDataForQuery(doc, exampleText, range.index, range.length);
 
   $.ajax({
     url: serverURL + '/api/query',
     beforeSend: function() {
       hideDropdownMenu(EventSource.API);
-      setCursorAtTheEnd();
+      // setCursorAtTheEnd();
       showLoadingSignal('Getting suggestions...');
     },
     type: 'POST',

@@ -2,9 +2,9 @@
 /****** Development ********************************************/
 /***************************************************************/
 const debug = false;
-const serverURL = 'http://127.0.0.1:5555';
+const serverURL = 'http://131.179.88.55:5555';
 const frontendURL = 'http://127.0.0.1:8000';
-var contactEmail = 'YOUR_EMAIL_ADDRESS';
+var contactEmail = 'ponienkung@ucla.edu';
 var isCounterEnabled = true;
 var sortSuggestions = true;
 

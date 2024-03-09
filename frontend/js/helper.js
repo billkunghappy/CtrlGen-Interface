@@ -72,6 +72,7 @@ function setCtrl(
   top_p,
   presence_penalty,
   frequency_penalty,
+  // model_list,
 ){
   $("#ctrl-n").val(n);
   $("#ctrl-max_tokens").val(max_tokens);
@@ -79,6 +80,14 @@ function setCtrl(
   $("#ctrl-top_p").val(top_p);
   $("#ctrl-presence_penalty").val(presence_penalty);
   $("#ctrl-frequency_penalty").val(frequency_penalty);
+  // for (let i = 0; i < model_list.length; i++) {
+  //   $("#ctrl-model").append($('<option/>', { 
+  //     value: model_list[i],
+  //     text : model_list[i],
+  //   }));
+  // }
+  // // After initialze the elements, change the first one to selected
+  // $("#ctrl-model option[value='"+ model_list[0] + "']").attr("selected","selected");
 }
 
 function setPrompt(prompt){

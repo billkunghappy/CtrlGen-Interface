@@ -310,12 +310,19 @@ function setText(text) {
 }
 
 function appendText(text) {
-  let lastIndex = getText().length;
+  // We change this part, to directly appendText at the cursor
+  // Legacy
+  // let lastIndex = getText().length;
 
-  // This action is automatically logged by text-change
-  quill.insertText(lastIndex, text);
+  // // This action is automatically logged by text-change
+  // quill.insertText(lastIndex, text);
 
-  // By default, selection change due to text insertion is "silent"
-  // and not saved as part of logs
-  setCursorAtTheEnd();
+  // // By default, selection change due to text insertion is "silent"
+  // // and not saved as part of logs
+  // setCursorAtTheEnd();
+  // New
+  console.log(text);
+  let curIndex = getCursorIndex();
+  quill.insertText(curIndex, text);
+  setCursor(curIndex + text.length());
 }

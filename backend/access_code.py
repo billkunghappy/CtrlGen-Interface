@@ -56,7 +56,8 @@ class AccessCodeConfig:
             self.example = row['example']
         if 'prompt' in row:
             self.prompt = row['prompt']
-
+        if "engine" in row:
+            self.engine = row['engine']
         if 'session_length' in row:
             self.session_length = int(row['session_length'])
 

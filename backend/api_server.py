@@ -9,8 +9,12 @@ import random
 import openai
 import warnings
 import numpy as np
+import json
 from time import time
 from argparse import ArgumentParser
+# For Local Model
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
 from reader import (
     read_api_keys, read_log,
@@ -30,6 +34,7 @@ from parsing import (
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
+import requests
 
 warnings.filterwarnings("ignore", category=FutureWarning)  # noqa
 
@@ -55,6 +60,7 @@ def start_session():
 
     # Check access codes
     access_code = content['accessCode']
+    print(f"Get access code {access_code},allowed_access_codes: {allowed_access_codes}")
     if access_code not in allowed_access_codes:
         if not access_code:
             access_code = '(not provided)'
@@ -149,6 +155,7 @@ def end_session():
 @cross_origin(origin='*')
 def query():
     content = request.json
+    print("Content: ", content)
     session_id = content['session_id']
     domain = content['domain']
     prev_suggestions = content['suggestions']
@@ -195,53 +202,110 @@ def query():
 
     # Parse doc
     doc = content['doc']
-    results = parse_prompt(example_text + doc, max_tokens, context_window_size)
+    prefix = doc[:content['cursor_index']]
+    selected = doc[content['cursor_index']: content['cursor_index'] + content['cursor_length']]
+    suffix = doc[content['cursor_index'] + content['cursor_length']:]
+    results = parse_prompt(example_text + prefix, max_tokens, context_window_size)
     prompt = results['effective_prompt']
+    if args.local_model_server is None:
+        print("Querying OpenAI...")
+        # Query GPT-3
+        try:
+            if suffix != "": # If the demarcation is there, then suggest an insertion
+                # If you want to use chat model, change here to `openai.chat.Completion.create`
+                response = openai.Completion.create(
+                    engine=engine,
+                    prompt=prompt,
+                    suffix=suffix,
+                    n=n,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                    logprobs=10,
+                    stop=stop_sequence,
+                )
+            else:
+                response = openai.Completion.create(
+                    engine=engine,
+                    prompt=prompt,
+                    n=n,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                    logprobs=10,
+                    stop=stop_sequence,
+                )
+            suggestions = []
+            for choice in response['choices']:
+                print(f"#{choice.text}#")
+                suggestion = parse_suggestion(
+                    choice.text,
+                    results['after_prompt'],
+                    stop_rules
+                )
+                probability = parse_probability(choice.logprobs)
+                suggestions.append((suggestion, probability, engine))
+        except Exception as e:
+            results['status'] = FAILURE
+            results['message'] = str(e)
+            print(e)
+            return jsonify(results)
+    else:
+        print("Querying local model...")
+        # Query Local Model using model and tokenizer
+        try:
+            # TODO: Need to implement sentence/passage constraints
+            word_control_type = content['length_unit']
+            if word_control_type == "none":
+                word_range = []
+            else:
+                # TODO: Implement word constraints, to get a range
+                word_range = (max(0, int(content['length']) -5) , max(int(content['length']), 1))
+            request_json = {
+                # Input Text
+                "Prefix": prefix,
+                "Suffix": suffix,
+                "Prior": selected,
+                # Constraints
+                "Instruct": content['instruct'],
+                'word_contraint': word_range,
+                'keyword_constraint': [k.strip() for k in content['keyword'].split(";") if k.strip() != ""], # TODO: Add this
+                # General Config.
+                # TODO: Some of them should be set to a fix value
+                'temperature': temperature, # Should be 0.8
+                'num_return_sequences': n,
+                'num_beams': 64, 
+                'no_repeat_ngram_size': -1, 
+                'top_p': top_p,
+                'token_constraint': [1, max_tokens]
+            }
 
-    # Query GPT-3
-    try:
-        if "---" in prompt: # If the demarcation is there, then suggest an insertion
-            prompt, suffix = prompt.split("---")
-            response = openai.Completion.create(
-                engine=engine,
-                prompt=prompt,
-                suffix=suffix,
-                n=n,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                logprobs=10,
-                stop=stop_sequence,
-            )
-        else:
-            response = openai.Completion.create(
-                engine=engine,
-                prompt=prompt,
-                n=n,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                logprobs=10,
-                stop=stop_sequence,
-            )
-        suggestions = []
-        for choice in response['choices']:
-            suggestion = parse_suggestion(
-                choice.text,
-                results['after_prompt'],
-                stop_rules
-            )
-            probability = parse_probability(choice.logprobs)
-            suggestions.append((suggestion, probability, engine))
-    except Exception as e:
-        results['status'] = FAILURE
-        results['message'] = str(e)
-        print(e)
-        return jsonify(results)
+            print(request_json)
+            r = requests.post(f'http://{args.local_model_server}/prompt/', json = request_json)
+            beam_results = json.loads(r.text)
+            suggestions = []
+            
+            # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
+            if (suffix.strip() == '' and selected.strip() == ''):
+                stop_rules = []
+                
+            for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
+                suggestion = parse_suggestion(
+                    choice_text,
+                    results['after_prompt'],
+                    stop_rules
+                )
+                probability = (np.e**log_prob) * 100
+                suggestions.append((suggestion, probability, engine))
+        except Exception as e:
+            results['status'] = FAILURE
+            results['message'] = str(e)
+            print(e)
+            return jsonify(results)
 
     # Always return original model outputs
     original_suggestions = []
@@ -343,6 +407,10 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, required=True)
     parser.add_argument('--port', type=int, required=True)
     parser.add_argument('--proj_name', type=str, required=True)
+    parser.add_argument('--local_model_server',
+                        type=str,
+                        default=None,
+                        help="Specify the local model ip and port. For example, 127.0.0.1:8888")
 
     # Optional arguments
     parser.add_argument('--replay_dir', type=str, default='../logs')

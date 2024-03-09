@@ -39,7 +39,7 @@ html, body {
 #shortcuts {
   display: inline;
   position: absolute;
-  top: 100px;
+  top: 10px;
   right: 40px;
   width: 230px;
   background-color: #f5f5f5;
@@ -64,23 +64,26 @@ html, body {
 }
 
 #control {
-  position: absolute;
-  width: 100%;
-  height: 60px;
+  position: relative;
+  width: 30%;
+  height: 100%;
   line-height: 60px;
   background-color: #f5f5f5;
   text-align: center;
-  vertical-align: middle;
+  /* vertical-align: middle; */
+  float: right;
   display: none;
   opacity: 0.8;
-  overflow-x: scroll;
+  overflow-y: scroll;
+  padding: 30px;
 }
 
 #frontend {
   position: relative;
   width: 60%;
   height: calc(100vh - 100px - 60px - 100px);  /* header - footer - top/bottom margin */
-  margin: 50px auto;
+  margin-top: 50px;
+  margin-left: 5%;
 }
 
 #frontend-overlay {
@@ -174,17 +177,16 @@ ol, ul {
 
 /* Control */
 #control select {
-  padding: .375rem .75rem;
-  width: 150px;
-  background-color: transparent;
+  width: 100%;
+  /* background-color: transparent; */
   border: none;
   color: #495057;
   text-align: center;
 }
 
 #control input {
-  width: 50px;
-  background-color: transparent;
+  width: 100%;
+  /* background-color: transparent; */
   border: none;
   text-align: center;
 }
