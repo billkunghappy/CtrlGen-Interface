@@ -32,14 +32,14 @@ html, body {
   height: 100px;
   padding: 20px;
   text-align: center;
-  background-color: #5560A9;
+  background-color: #31363F;
   font-family: 'Source Sans Pro', sans-serif;
 }
 
 #shortcuts {
   display: inline;
   position: absolute;
-  top: 10px;
+  bottom: calc(60px + 30px); /* Footer height 60px plus 30px */
   right: 40px;
   width: 230px;
   background-color: #f5f5f5;
@@ -186,6 +186,15 @@ ol, ul {
 
 #control input {
   width: 100%;
+  height: 100%;
+  /* background-color: transparent; */
+  border: none;
+  text-align: center;
+}
+
+#control select {
+  width: 100%;
+  height: 100%;
   /* background-color: transparent; */
   border: none;
   text-align: center;
@@ -195,6 +204,28 @@ ol, ul {
   display: inline-flex;
   flex-flow: nowrap;
   flex-wrap: nowrap;
+}
+
+#control {
+  font-size: 1.5em;
+  font-family: 'Source Sans Pro', sans-serif;
+  color: #222831;
+}
+#control label {
+  /* font-size: 1.5em;
+  font-family: 'Source Sans Pro', sans-serif;
+  color: #222831; */
+  text-align: left;
+}
+
+#ctrl-reset-btn {
+  width: 150px;
+  margin: auto;
+  font-size: 1.1em;
+}
+
+#control .row {
+  margin-top: 10%;
 }
 
 /* Instruction */
@@ -225,3 +256,31 @@ ol, ul {
     background-color: rgba(0,0,0,.5);
     -webkit-box-shadow: 0 0 1px rgba(255,255,255,.5);
 }
+
+/* Control Swith */
+
+
+#ctrl-switch-wrapper {
+  display: inline-block;
+  height: 40px;
+  width: 100px;
+  padding-left: 0px;
+}
+
+#ctrl-switch {
+  width: 100%;
+  height: 100%;
+  float: right;
+}
+
+.form-check-input:checked {
+  background-color: #76ABAE;
+  border-color: #76ABAE;
+}
+
+/* .form-switch .form-check-input {
+background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%118, 171 ,174, 1'/%3e%3c/svg%3e");
+}
+.form-switch .form-check-input:focus {
+background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%118, 171 ,174, 1'/%3e%3c/svg%3e");
+} */

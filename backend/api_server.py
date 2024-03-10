@@ -287,10 +287,21 @@ def query():
             print(request_json)
             r = requests.post(f'http://{args.local_model_server}/prompt/', json = request_json)
             beam_results = json.loads(r.text)
+            # ---------- Start debug 
+            # beam_results = {}
+            # beam_results['beam_outputs_texts'] = [
+            #     "No Space",
+            #     " Start Space",
+            #     "End Space ",
+            #     " Both Space ",
+            #     "XXX"
+            # ]
+            # beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.1]
+            # ---------- End debug 
             suggestions = []
             
             # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
-            if (suffix.strip() == '' and selected.strip() == ''):
+            if not (suffix.strip() == '' and selected.strip() == ''):
                 stop_rules = []
                 
             for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):

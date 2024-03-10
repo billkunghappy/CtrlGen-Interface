@@ -324,5 +324,18 @@ function appendText(text) {
   console.log(text);
   let curIndex = getCursorIndex();
   quill.insertText(curIndex, text);
-  setCursor(curIndex + text.length());
+  // Add color to the inserted text
+  quill.formatText(curIndex, curIndex + text.length, {                   // unbolds 'hello' and set its color to blue
+    'bold' : false,
+    'color': 'rgb(128,128,128)'
+  });
+  setCursor(curIndex + text.length);
+
+  // Start a one time text change 
+  quill.once('text-change', (delta, oldDelta, source) => {
+    // For token length control, we will call it with silent
+    quill.removeFormat(curIndex, curIndex + text.length)
+    console.log("Editor changed, remove format...")
+      
+  });
 }

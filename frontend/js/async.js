@@ -370,6 +370,11 @@ function queryGPT3() {
         }
 
         if (data.suggestions_with_probabilities.length > 0) {
+          let msg = 'Showing the suggestion stats!\n\n'
+                    + '- could not think of suggestions (' + data.counts.empty_cnt + ')\n'
+                    + '- generated same suggestions as before (' + data.counts.duplicate_cnt + ')\n'
+                    + '- generated suggestions that contained banned words (' + data.counts.bad_cnt + ')\n';
+          console.log(msg);
           addSuggestionsToDropdown(data.suggestions_with_probabilities);
           showDropdownMenu('api');
         } else {
