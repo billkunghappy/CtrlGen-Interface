@@ -310,6 +310,28 @@ async function saveLogs() {
 ////////////////////////////////////////////////////////////////////////////////
 
 function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
+  // Check if the ctrl switch is checked. If not, don't send HMM control
+  if ($("#ctrl-switch").is(':checked')){
+    // n = $("#ctrl-n").val();
+    // max_tokens = $("#ctrl-max_tokens").val();
+    // temperature = $("#ctrl-temperature").val();
+    // top_p = $("#ctrl-top_p").val();
+    // presence_penalty = $("#ctrl-presence_penalty").val();
+    // frequency_penalty = $("#ctrl-frequency_penalty").val();
+    // model = $("#ctrl-model").val();
+    keyword = $("#ctrl-keyword").val();
+    length_unit = $("#ctrl-length_unit").val();
+    length = [$('#ctrl-length-slider > input:eq(0)').val(), $('#ctrl-length-slider > input:eq(1)').val()];
+    instruct = $("#ctrl-instruct").val();
+    console.log("Send HMM control");
+  }
+  else {
+    keyword = "";
+    length_unit = "none";
+    length = [];
+    instruct = "";
+    console.log("Skip HMM control");
+  }
   const data = {
     'session_id': sessionId,
     'domain': domain,
@@ -329,10 +351,10 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
     'stop': stop,
     // Model and Our Control Signal
     'model': $("#ctrl-model").val(),
-    'keyword': $("#ctrl-keyword").val(),
-    'length_unit': $("#ctrl-length_unit").val(),
-    'length': $("#ctrl-length").val(),
-    'instruct': $("#ctrl-instruct").val(),
+    'keyword': keyword,
+    'length_unit': length_unit,
+    'length': length,
+    'instruct': instruct,
     'engine': engine,
 
     'suggestions': getSuggestionState(),

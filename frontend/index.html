@@ -37,6 +37,8 @@
     <script src="./js/editor.js" defer></script>
     <script src="./js/dropdown.js" defer></script>
     <script src="./js/async.js" defer></script>
+    <script src="./js/slider.js" defer></script>
+    <script src="./js/control_panel.js" defer></script>
     <script src="./js/index.js" defer></script>
 
   </head>
@@ -46,9 +48,10 @@
       <h1 class="text-light">CtrlGen
         <i id='robot' class="fas fa-pen-nib"></i>
         <i id='setting-btn' class="fa fa-cog" aria-hidden="true"></i>
-        <div class="text-light" style="float: right; width: 200px; margin-top: -15px;">
+        <div class="text-light" style="float: right; width: 200px; margin-top: -15px; display: none;">
           <div class="form-check form-switch" id = "ctrl-switch-wrapper">
-            <input class="form-check-input" type="checkbox" id="ctrl-switch">
+            <!-- To check whether this is checked: https://stackoverflow.com/questions/24278494/jquery-if-checkbox-is-checked-bootstrap-switch -->
+            <input class="form-check-input" type="checkbox" id="ctrl-switch" checked>
           </div>
           <h3>Controlling</h3>
         </div>
@@ -108,7 +111,7 @@
       </div>
     </div> -->
 
-    <div id="control">
+    <div id="control" class="slideright">
       <form>
         <fieldset>
           <!-- Disable model selection -->
@@ -167,39 +170,66 @@
           </div>
           <!-- Our Control -->
           <hr class="mt-2 mb-3" id="sep-control" style="display: none;"/>
-          <div class="form-group row">
-            <label for="ctrl-keyword" class="col-sm-6 col-form-label">Keywords</label>
-            <div class="col-sm-6 ml-auto mr-0">
-              <input type="text" id="ctrl-keyword" class="form-control", placeholder="A;B">
+          <div class="card card-body">
+            <div class="form-group row">
+              <label for="ctrl-keyword" class="col-sm-6 col-form-label">Keywords</label>
+              <div class="col-sm-6 ml-auto mr-0">
+                <input type="text" id="ctrl-keyword" class="form-control", placeholder="A;B">
+              </div>
             </div>
           </div>
           <!-- Length Control -->
-          <div class="form-group">
-            <div class="row">
-              <label for="ctrl-length_unit" class="col-sm-6 col-form-label">Length Control</label>
-              <div class="col-sm-6 ml-auto mr-0">
-                <select id="ctrl-length_unit" class="form-select form-control">
-                  <option value="none" selected>None</option>
-                  <option value="token">Token</option>
-                  <option value="word">Word</option>
-                  <option value="sentence">Sentence</option>
-                  <option value="passage">Passage</option>
-                </select>
+          <div class="card card-body">
+            <div class="form-group">
+              <div class="row">
+                <label for="ctrl-length_unit" class="col-sm-6 col-form-label">Length</label>
+                <div class="col-sm-6 ml-auto mr-0">
+                  <select id="ctrl-length_unit" class="form-select form-control">
+                    <option value="none" selected>None</option>
+                    <option value="word">Word</option>
+                    <option value="sentence">Sentence</option>
+                    <option value="passage">Passage</option>
+                  </select>
+                </div>
               </div>
-            </div>
-            <!-- may need to change to multi-range slider in the future -->
-            <div class="row">
-              <div class="col-sm-10 mx-auto col-centered">
-                <input id="ctrl-length" class="multi-range" type="range" value="1" max="100" oninput="this.nextElementSibling.value = this.value" style="width: 80%;"/>
-                <output style="margin-left: auto; width: 15%;">1</output>
+              <!-- may need to change to multi-range slider in the future -->
+              <div class="row" id="ctrl-length-slider-row">
+                <div class="col-sm-10 mx-auto col-centered">
+                  <!-- <input id="ctrl-length" class="multi-range" type="range" value="1" max="100" oninput="this.nextElementSibling.value = this.value" style="width: 80%;"/> -->
+                  <div id="ctrl-length-slider" class="range-slider"></div>
+                </div>
               </div>
             </div>
           </div>
           <!-- Soft Control -->
-          <div class="form-group row">
-            <label for="ctrl-instruct" class="col-sm-4 col-form-label">Instruction</label>
-            <div class="col-sm-8 ml-auto mr-0">
-              <input type="text" id="ctrl-instruct" class="form-control", placeholder="Continue the text by...">
+          <div class="card card-body">
+            <div class="form-group row">
+              <label for="ctrl-instruct" class="col-sm-4 col-form-label">Instruction</label>
+              <div class="col-sm-8 ml-auto mr-0">
+                <input type="text" id="ctrl-instruct" class="form-control", placeholder="Continue the text by...">
+              </div>
+            </div>
+          </div>
+          <!-- Token Control -->
+          <div class="row" id="ctrl-token-slider-row">
+            <!-- <p>
+              <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#ctrl_token_collapse" aria-expanded="false" aria-controls="collapseExample">
+                Token Control
+              </button>
+            </p> -->
+            <div class="collapse show slideright" id="ctrl-token-collapse">
+              <div class="card card-body">
+                <div class="spinner-border" role="status" id="ctrl-token-spinner">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <label class="col-sm-12 col-form-label col-centered" style="text-align: center; margin-bottom: 30px;" data-toggle="tooltip" data-placement="bottom" title="Scroll the slidebar to check model's output with different token length">
+                  Try different token length!
+                </label>
+                <div class="col-sm-10 mx-auto col-centered">
+                  <!-- <input id="ctrl-length" class="multi-range" type="range" value="1" max="100" oninput="this.nextElementSibling.value = this.value" style="width: 80%;"/> -->
+                  <div id="ctrl-token-slider" class="range-slider single-slider"></div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="form-group row">
@@ -221,10 +251,10 @@
 
     <!-- Footer -->
     <footer id="footer">
-      <span class="text-muted"><small>
-        Made by <a href="https://minalee.info">Mina Lee</a> &nbsp;&nbsp;&nbsp;
-        &copy; Copyright 2022. All Rights Reserved.
-      </small></span>
+      <!-- <span class="text-muted"><small>
+        Made by <a href="#">anonymous</a> &nbsp;&nbsp;&nbsp;
+        &copy; Copyright 2024. All Rights Reserved.
+      </small></span> -->
 
       <button id="finish-btn" type="button" class="btn btn-light" disabled><i class="fas fa-check"></i>Save your work</button>
       <!-- <button id="finish-replay-btn" type="button" class="btn btn-light" disabled><i class="fas fa-check"></i>Get a replay link</button> -->
@@ -243,5 +273,8 @@
 
     <!-- Include the Quill library -->
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
+    <!-- Include the range slider API: https://n3r4zzurr0.in/range-slider-input/ -->
+    <script src="https://cdn.jsdelivr.net/npm/range-slider-input@2.4/dist/rangeslider.umd.min.js"></script>
   </body>
 </html>

@@ -340,6 +340,10 @@ function appendText(text) {
     });
     // quill.removeFormat(curIndex + text.length, 10000)
     console.log("Editor changed, remove format...")
-      
+    // Also slide back the token control panel
+    $("#ctrl-token-collapse").addClass("slideright");
   });
+
+  // Show the token control panel
+  $("#ctrl-token-collapse").removeClass("slideright");
 }

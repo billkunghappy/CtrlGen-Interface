@@ -12,12 +12,10 @@ $(function() {
   /* Enable controls */
   ctrl = getControl(); // &ctrl=show
   if (ctrl.includes("show")){
-    // Directly show the control panel
-    $('#control').toggleClass('show');
-    // Show Control Panel 
-    $('#setting-btn').css('display', 'inline');
-    $('#setting-btn').click(function(e) {
-      $('#control').toggleClass('show');
+    // Show control switch
+    $('#ctrl-switch-wrapper').parent().css('display', 'block')
+    $('#ctrl-switch').click(function(e) {
+      $('#control').toggleClass('slideright');
     });
     $('#finish-btn').prop('disabled', false);
     $('#finish-replay-btn').prop('disabled', false);
@@ -35,8 +33,13 @@ $(function() {
     // Show the separate lines
     $('#sep-control').css('display', 'block');
   }
-  
-
+  else{
+    // Hide the control panel
+    $('#control').toggleClass('slideright');
+  }
+  // Initialize the sliders
+  InitSlider();
+  // Initiallize listener for reset-btn
   let accessCode = getAccessCode();
   startSession(accessCode);
 

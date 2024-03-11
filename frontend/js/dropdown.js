@@ -192,3 +192,41 @@ function showDropdownMenu(source, is_reopen=false) {
 
 
 }
+
+$('#ctrl-length_unit').on('change', function(e){
+  // $('#ctrl-length_unit').attr('disabled', true);
+  if (this.value == "none"){
+    // $("#ctrl-length-slider-row").addClass("slideright");
+    ctrl_len_slider.disabled(true);
+    $('#ctrl-length_unit').parents(".card-body").removeClass('control');
+  }
+  else{
+    $('#ctrl-length_unit').parents(".card-body").addClass('control');
+    // $("#ctrl-length-slider-row").removeClass("slideright");
+    // reset = reset_slider(value = [1,2], min = 1, max = 64);
+    //  Have bug when setting min-max
+    // if (this.value == "word"){
+    //   reset = reset_slider(
+    //     value = [10,25],
+    //     // min = 1,
+    //     // max = 64
+    //     );
+    // }
+    ctrl_len_slider.disabled(false);
+    // else if (this.value == "sentence"){
+    //   reset = reset_slider(
+    //     value = [1,2],
+    //     min = 1,
+    //     max = 8
+    //     );
+    // }
+    // else if (this.value == "passage"){
+    //   reset = reset_slider(
+    //     value = [1,2],
+    //     min = 1,
+    //     max = 4
+    //     );
+    // }
+  }
+  // $('#ctrl-length_unit').attr('disabled', false);
+});
