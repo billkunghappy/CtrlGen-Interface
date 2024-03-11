@@ -274,7 +274,13 @@ ol, ul {
 
 /* Control Swith */
 
-
+div:has(>#ctrl-switch-wrapper){
+  display: none;
+  position: absolute;
+  width: 200px;
+  right: calc(12.5% - 100px);
+  top: 10px;
+}
 #ctrl-switch-wrapper {
   display: inline-block;
   height: 40px;
