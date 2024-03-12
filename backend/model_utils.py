@@ -6,7 +6,7 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
     # if llama_insertion is true, use Insertion for the insertion prompt
     have_prefix = prefix.strip() != ""
     have_prior = prior.strip() != ""
-    have_suffix = suffix.strip() != ""    
+    have_suffix = suffix.strip() != ""
     if have_prior: # +prior, +-prefix, +-suffix
         operation = "Rewrite"
     elif have_suffix:  # -prior, +-prefix, +suffix
@@ -20,7 +20,7 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
     else: # -prior, -prefix, -suffix
         operation = "Write"
     return operation
-        
+
 
 def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, operation):
     if operation == "Insertion":
@@ -33,7 +33,7 @@ def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, o
         'Insertion' : "Generate the text{SoftControl} at [INSERT_TEXT] tag:\n{Prefix} [INSERT_TEXT] {Suffix}",
         'Rewrite' : "Continue the Prefix by rewriting \"{Prior}\"{SoftControl}:\nPrefix: {Prefix}",
         # 'RewriteOnly' : "Rewrite the given text{SoftControl}:\n{Prior}", # Paraphrase
-        
+
     }
     prompt = operation_prompts[operation].format(
         Prefix = Prefix,
@@ -57,13 +57,13 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
         prompt (str): The example prompt
         suffix (str): The example suffix
     """
-    
+
     prefix_tokens = tokenizer.encode(prefix)[1:]
     # 3. Remove additional SPIECE_UNDERLINE token(29871)
     if prefix_tokens[-1] == 29871:
         prefix_tokens = prefix_tokens[:-1]
     prefix_tokens = tuple(prefix_tokens)
-    
+
     if suffix != '':
         # Cannot strip the suffix at the start. Need to keep the \n
         if suffix[0] == " ":
@@ -73,30 +73,27 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
             suffix_tokens = suffix_tokens[1:]
         suffix_tokens = tuple(suffix_tokens + [2])
     else:
-        suffix_tokens = tuple([2])
+        # suffix_tokens = tuple([2])
+        suffix_tokens = tuple([29889])
     return prefix_tokens, suffix_tokens
 
-def get_sequence_scores(llama_model, input_ids, logits_mask, batch_size=32):
+
+def get_sequence_scores(llama_model, input_ids, mask1, mask2, past_key_values, batch_size=32):
     n, d = input_ids.shape
-    log_probs = []
+    kv_len = past_key_values[0][0].shape[2]
+    print(kv_len)
     with torch.no_grad():
-        for batch_idx in range(0, n, batch_size):
-            batch_size_ = min(batch_size, n - batch_idx)
+        logits = llama_model(input_ids[:, kv_len:], past_key_values=past_key_values).logits[:, :-1, :]
+        logits = torch.log_softmax(logits, dim=-1)
+        log_probs = logits[torch.arange(n)[:, None],
+            torch.arange(d-kv_len-1)[None, :],
+            input_ids[:, kv_len+1:]]
 
-            input_ids_batch = input_ids[batch_idx: batch_idx + batch_size_]
-            logits = torch.log_softmax(
-                    llama_model(input_ids_batch, return_dict='True').logits, dim=-1)[:, :-1, :]
-            log_probs_batch = logits[torch.arange(batch_size_)[:, None],
-                torch.arange(d-1)[None, :],
-                input_ids_batch[:, 1:]]
+    scores1 = torch.sum(log_probs * mask1[:, kv_len+1:], dim=-1)
+    scores2 = torch.sum(log_probs * mask2[:, kv_len+1:], dim=-1)
 
-            log_probs.append(log_probs_batch)
+    return scores1, scores2
 
-    log_probs = torch.cat(log_probs, dim=0)
-    log_probs *= logits_mask[:, 1:]
-    log_probs = torch.mean(log_probs, dim=-1)
-    # sequence_rank = torch.argsort(log_probs, descending = True).tolist()
-    return log_probs
 
 class ConstraintLogitsProcessor(LogitsProcessor):
     def __init__(self, hmm_model, hmm_config, temperature=1.0):
@@ -124,7 +121,7 @@ class ConstraintLogitsProcessor(LogitsProcessor):
             batch_size=hmm_batch_size)
 
         hmm_logits -= hmm_logits_
-        hmm_logits = torch.cat((hmm_logits, -1e30 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
+        hmm_logits = torch.cat((hmm_logits, -1e10 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
 
         logits = torch.log_softmax(scores, dim=-1)
         logits = torch.log_softmax(hmm_logits + logits, dim=-1)

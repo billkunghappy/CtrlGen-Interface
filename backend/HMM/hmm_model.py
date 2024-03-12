@@ -101,7 +101,6 @@ class HMM(nn.Module):
         max_tokens = max([x[1] for x in token_ranges])
 
         # precompute renages for C_cache
-        max_tokens = max([x[1] for x in token_ranges])
         ranges = set()
         for token_range in token_ranges:
             min_tokens_, max_tokens_ = token_range
@@ -173,14 +172,12 @@ class HMM(nn.Module):
         ranges = list(ranges)
         range_mask = torch.zeros(len(ranges), max_tokens+1, device=device)
         for idx, r in enumerate(ranges):
-            range_mask[idx, torch.arange(r[0], r[1]+1)] = 1.0
+            range_mask[idx, torch.arange(r[0], r[1]+1)] = 1.0        
 
         C_shape = C.shape
         C = matmul_a_logb(range_mask, torch.flatten(C, start_dim=1, end_dim=2)) # num_ranges * (num_states * hidden_states)
         C = C.view(-1, C_shape[1], C_shape[2])
-        # C = torch.maximum(C, neginf_cuda)
         C.nan_to_num_(neginf=-1e30)
-        # C = torch.unbind(C, dim=0)
 
         for idx, r in enumerate(ranges):
             C_cache[r] = C[idx]
@@ -224,7 +221,8 @@ class HMM(nn.Module):
         generation_offset, min_tokens, max_tokens, batch_size=8):
 
         device = self.alpha_exp.device
-        neginf_cuda = -1e30 * torch.ones(1, device=device)
+        eos_token_id = 2
+        neginf_cuda = -1e10 * torch.ones(1, device=device)
 
         prefix_num, prefix_len = len(prefixes), len(prefixes[0])
 
@@ -292,5 +290,12 @@ class HMM(nn.Module):
             batch_size_ = min(batch_size, prefix_num - batch_idx)
             logits_.append(matmul_log(A[batch_idx:batch_idx+batch_size_], beta))
         logits_ = torch.cat(logits_, dim=0) # prefix_num * vocab_size
+
+        # early termination if suffix does not end with eos
+        if suffix[-1] != eos_token_id and generated_tokens > 0:
+            for prefix_idx, prefix in enumerate(prefixes):
+                if prefix[-len(suffix):] == suffix:
+                    logits[prefix_idx, eos_token_id] = -neginf_cuda
+                    logits_[prefix_idx, eos_token_id] = 0.0
 
         return logits, logits_

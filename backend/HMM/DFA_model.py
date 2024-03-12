@@ -259,33 +259,60 @@ class KeyphraseBuilder:
 
 
 # Generated text must be end with . " ? or !
+# class EndSentenceBuilder:
+#     def __init__(self, tokenizer, vocab_size,
+#             periods=['.','\"', '?', '!'], eos_token_id=2):
+
+#         vocab_set = set([x for x in range(0, vocab_size)])
+#         token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
+#         others_set = vocab_set.difference(set(token_ids))
+
+#         edges = []
+#         for idx, token_id in enumerate(token_ids):
+#             edges.append((-1, idx, set([token_id])))
+
+#         for idx, _ in enumerate(token_ids):
+#             edges.append((idx, -2, set([eos_token_id])))
+
+#         for idx, _ in enumerate(token_ids):
+#             for jdx, token_id in enumerate(token_ids):
+#                 edges.append((idx, jdx, set([token_id])))
+
+#         for idx, _ in enumerate(token_ids):
+#             edges.append((idx, -1, others_set))
+#         edges.append((-1, -1, others_set))
+
+#         edges.append((-2, -2, vocab_set))
+
+#         initial_state = -1
+#         accept_states = set([-2])
+
+#         self.dfa_graph = {
+#             'edges': edges,
+#             'initial_state': initial_state,
+#             'accept_states': accept_states,
+#         }
+
+
+#     def build(self):
+#         return self.dfa_graph
+
 class EndSentenceBuilder:
     def __init__(self, tokenizer, vocab_size,
             periods=['.','\"', '?', '!'], eos_token_id=2):
 
-        vocab_set = set([x for x in range(0, vocab_size)])        
+        vocab_set = set([x for x in range(0, vocab_size)])
         token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
         others_set = vocab_set.difference(set(token_ids))
 
-        edges = []
-        for idx, token_id in enumerate(token_ids):
-            edges.append((-1, idx, set([token_id])))
-        
-        for idx, _ in enumerate(token_ids):
-            edges.append((idx, -2, set([eos_token_id])))
+        edges = [
+            (0, 1, set(token_ids)),
+            (0, 0, others_set),
+            (1, 1, vocab_set)
+        ]
 
-        for idx, _ in enumerate(token_ids):
-            for jdx, token_id in enumerate(token_ids):
-                edges.append((idx, jdx, set([token_id])))
-
-        for idx, _ in enumerate(token_ids):
-            edges.append((idx, -1, others_set))
-        edges.append((-1, -1, others_set))
-
-        edges.append((-2, -2, vocab_set))
-
-        initial_state = -1
-        accept_states = set([-2])
+        initial_state = 0
+        accept_states = set([0])
 
         self.dfa_graph = {
             'edges': edges,
