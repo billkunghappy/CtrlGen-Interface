@@ -54,7 +54,7 @@ def hash_hmm_status(prefix_tokens, suffix_tokens,
 
     return (tuple(prefix_tokens),
         tuple(suffix_tokens),
-        tuple(sorted([tuple(x) for x in token_constraint])),
+        tuple(word_constraint),
         tuple(sorted([tuple(x) for x in word_constraint])),
         tuple(sorted(keyword_constraint)),
         Suffix == '')
