@@ -125,13 +125,13 @@ class HMM(nn.Module):
         A_cache[tuple(prefix_tokens)] = y
 
         # initialize cache B
-        B_cache = {}
+        B_cache = torch.empty(len(suffix_tokens), hidden_states, device=device)
         y = torch.zeros(hidden_states, device=device)
         for t in range(len(suffix_tokens)-1, -1, -1):
             if t != len(suffix_tokens) - 1:
                 y = matmul_a_logb(alpha_exp, y[:, None]).squeeze(-1)
             y = y + beta[:, suffix_tokens[t]]
-            B_cache[-t] = y
+            B_cache[t, :] = y
 
         # compute T_weights
         T_mask = dfa_model.T_mask
@@ -147,7 +147,6 @@ class HMM(nn.Module):
         y_[list(dfa_model.accept_states), :] = y
         y = matmul_loga_b(y_, alpha_exp_t) # num_states * hidden_states
 
-        # C = [y]
         C = torch.empty(max_tokens+1, num_states, hidden_states, device=device)
         C[0, :, :] = y
         for t in range(1, max_tokens+1):
@@ -157,8 +156,6 @@ class HMM(nn.Module):
             y.nan_to_num_(neginf=-1e30)
             y = matmul_loga_b(y, alpha_exp_t) # num_states * hidden_states
             C[t, :, :] = y
-            # C.append(y)
-        # C = torch.stack(C, dim=0) # (max_tokens+1) * num_states * hidden_states
 
         ranges = set()
         for token_range in token_ranges:
@@ -172,7 +169,7 @@ class HMM(nn.Module):
         ranges = list(ranges)
         range_mask = torch.zeros(len(ranges), max_tokens+1, device=device)
         for idx, r in enumerate(ranges):
-            range_mask[idx, torch.arange(r[0], r[1]+1)] = 1.0        
+            range_mask[idx, torch.arange(r[0], r[1]+1)] = 1.0
 
         C_shape = C.shape
         C = matmul_a_logb(range_mask, torch.flatten(C, start_dim=1, end_dim=2)) # num_ranges * (num_states * hidden_states)
@@ -218,7 +215,7 @@ class HMM(nn.Module):
 
     # compute logits for next_token:
     def compute_logits(self, prefixes, suffix,
-        generation_offset, min_tokens, max_tokens, batch_size=8):
+        generation_offset, token_ranges, batch_size=8):
 
         device = self.alpha_exp.device
         eos_token_id = 2
@@ -239,59 +236,67 @@ class HMM(nn.Module):
         else:
             A = torch.stack([A_cache[prefix] for prefix in prefixes], dim=0) # prefix_num * hidden_states
 
-        logits = torch.full((prefix_num, vocab_size), -1e30, device=device)
+        logits = torch.full((prefix_num, vocab_size), -1e10, device=device)
 
-        # generate suffix at least one token after current prefix
+        # gather the list of indices that has at least one more token left before suffix
         generated_tokens = prefix_len - generation_offset
-        remaining_tokens_max = max_tokens - generated_tokens
-        remaining_tokens_min = max(1, min_tokens - generated_tokens)
-        if remaining_tokens_max > 0:
-            logits = []
-            for batch_idx in range(0, prefix_num, batch_size):
-                batch_size_ = min(batch_size, prefix_num - batch_idx)
-                A_batch = A[batch_idx: batch_idx+batch_size_]
-                prefixes_batch = prefixes[batch_idx: batch_idx+batch_size_]
+        selected_idx = [prefix_idx for prefix_idx, prefix in enumerate(prefixes)
+            if token_ranges[prefix_idx][1] - generated_tokens > 0]
+        selected_num = len(selected_idx)
+        if len(selected_idx) > 0:
+            for batch_idx in range(0, selected_num, batch_size):
+                batch_size_ = min(batch_size, selected_num - batch_idx)
+                selected_batch = selected_idx[batch_idx: batch_idx+batch_size_]
 
-                C = C_cache[(remaining_tokens_min-1, remaining_tokens_max-1)] # num_states * hidden_states
-                C = A_batch[:, None, :] + C[None, :, :] # prefix_num * num_states * hidden_states
+                A_batch = A[selected_batch] # batch_size_ * hidden_states
+
+                prefixes_batch = [prefixes[i] for i in selected_batch]
+
+                C_batch = []
+                for prefix_idx in selected_batch:
+                    min_tokens, max_tokens = token_ranges[prefix_idx]
+                    remaining_tokens_max = max_tokens - generated_tokens
+                    remaining_tokens_min = max(1, min_tokens - generated_tokens)
+                    C_batch.append(C_cache[(remaining_tokens_min-1, remaining_tokens_max-1)])
+                C_batch = torch.stack(C_batch, dim=0) # batch_size_ * num_states * hidden_states
+
+                C = A_batch[:, None, :] + C_batch # batch_size_ * num_states * hidden_states
 
                 C_shape = C.shape
-                C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta) # (prefix_num * num_states) * vocab_size
-                C = C.view(C_shape[0], C_shape[1], -1) # prefix_num * num_states * vocab_size
+                C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta) # (batch_size_ * num_states) * vocab_size
+                C = C.view(C_shape[0], C_shape[1], -1) # batch_size_ * num_states * vocab_size
 
-                mask = torch.stack([VE_mask[D_cache[prefix]] for prefix in prefixes_batch], dim=0) # prefix_mask, prefix_num * num_transitions
-                mask = mask[:, :, None] * EV_mask[None, :, :] # prefix_num * num_transitions * num_states
-                mask = torch.transpose(mask, 1, 2) # prefix_num * num_states * num_transitions
+                mask = torch.stack([VE_mask[D_cache[prefix]] for prefix in prefixes_batch], dim=0) # prefix_mask, batch_size_ * num_transitions
+                mask = mask[:, :, None] * EV_mask[None, :, :] # batch_size_ * num_transitions * num_states
+                mask = torch.transpose(mask, 1, 2) # batch_size_ * num_states * num_transitions
 
                 mask_shape = mask.shape
-                mask = torch.matmul(torch.flatten(mask, start_dim=0, end_dim=1), T_mask) # (prefix_num * num_states) * vocab_size
-                mask = mask.view(mask_shape[0], mask_shape[1], -1) # prefix_num * num_states * vocab_size
+                mask = torch.matmul(torch.flatten(mask, start_dim=0, end_dim=1), T_mask) # (batch_size_ * num_states) * vocab_size
+                mask = mask.view(mask_shape[0], mask_shape[1], -1) # batch_size_ * num_states * vocab_size
                 mask = torch.nan_to_num(torch.log(mask), neginf=-1e30)
 
-                logits_ = logsumexp(C + mask, dim=1) # prefix_num * vocab_size
+                logits_batch = logsumexp(C + mask, dim=1) # batch_size_ * vocab_size
 
-                logits.append(logits_)
+                logits[selected_batch, :] = logits_batch
 
-            logits = torch.cat(logits, dim=0)
-
-        # if current prefix already ends with part/none of the suffix
-        offset_min = min_tokens + generation_offset
-        offset_max = max_tokens + generation_offset
+        # if current prefix already ends with part/none of the suffix; no hmm mini-batch here
+        # TODO: potential optimization
         for prefix_idx, prefix in enumerate(prefixes):
+            min_tokens, max_tokens = token_ranges[prefix_idx]
+            offset_min = min_tokens + generation_offset
+            offset_max = max_tokens + generation_offset
             offsets = ends_at(prefix, suffix,
                 offset_min, D_cache, dfa_model)
             for offset in offsets:
-                log_prob = logsumexp(A[prefix_idx] + B_cache[-offset], dim=0)
+                log_prob = logsumexp(A[prefix_idx] + B_cache[offset], dim=0)
                 logits[prefix_idx, suffix[offset]] = torch.logaddexp(logits[prefix_idx, suffix[offset]], log_prob)
 
-        # compute normalizing constant
-        logits_ = []
-        for batch_idx in range(0, prefix_num, batch_size):
-            batch_size_ = min(batch_size, prefix_num - batch_idx)
-            logits_.append(matmul_log(A[batch_idx:batch_idx+batch_size_], beta))
-        logits_ = torch.cat(logits_, dim=0) # prefix_num * vocab_size
+
+        # compute normalizing constant; no hmm mini-batch here
+        logits_ = matmul_log(A, beta)
 
         # early termination if suffix does not end with eos
+        # TODO: only to handle the case when Suffix == '', might not work in general
         if suffix[-1] != eos_token_id and generated_tokens > 0:
             for prefix_idx, prefix in enumerate(prefixes):
                 if prefix[-len(suffix):] == suffix:

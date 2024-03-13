@@ -16,6 +16,7 @@ from HMM.hmm_model import *
 from HMM.DFA_model import *
 from model_utils import (
     encode_with_messages_format,
+    hash_hmm_status,
     get_prefix_suffix_tokens_for_HMM,
     get_sequence_scores,
     ConstraintLogitsProcessor,
@@ -23,6 +24,9 @@ from model_utils import (
 )
 
 app = Flask(__name__)
+
+kv_cache = {}
+hmm_status = None
 
 @app.route('/prompt/',methods=['POST'])
 def prompt():
@@ -37,8 +41,9 @@ def prompt():
         llama_insertion = args.llama_insertion # If set to true, use "Insertion" for the insertion prompt
     )
     # Get the constraints
-    token_constraint, word_contraint, keyword_constraint = input_json["token_constraint"], input_json["word_contraint"], input_json["keyword_constraint"]
+    token_constraint, word_constraint, keyword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"]
     max_tokens = max([token_range[1] for token_range in token_constraint])
+    num_token_ranges = len(token_constraint)
 
     # Get generation config
     temperature = input_json['temperature']
@@ -47,9 +52,9 @@ def prompt():
     no_repeat_ngram_size = input_json['no_repeat_ngram_size']
     top_p = input_json['top_p']
 
-    # TODO
-    if word_contraint != []:
-        max_tokens = max(max_tokens, int(1.5 * word_contraint[1]))
+    # TODO Maybe we should let model_server decide token_constraint based on word_constraint?
+    if word_constraint != []:
+        max_tokens = max(max_tokens, int(1.5 * word_constraint[1]))
 
     # Get prefix, suffix tokens for HMM
     prefix_tokens, suffix_tokens = get_prefix_suffix_tokens_for_HMM(Prefix, Suffix, tokenizer)
@@ -59,9 +64,9 @@ def prompt():
     if len(keyword_constraint) != 0:
         print("Build Keyword")
         dfa_graphs.append(keyphrase_builder.build(keyword_constraint))
-    if len(word_contraint) != 0:
+    if len(word_constraint) != 0:
         print("Build Word Length")
-        dfa_graphs.append(word_count_builder.build(word_contraint[0], word_contraint[1]))
+        dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
     if Suffix == '':
         dfa_graphs.append(end_sentence_builder.build())
 
@@ -69,7 +74,6 @@ def prompt():
         dfa_model = DFAModel(DFA_prod(dfa_graphs, mode='intersection'))
     else:
         dfa_model = DFAModel(trivial_builder.build())
-
 
     # Get input_ids
     prompt_tokens = encode_with_messages_format(
@@ -81,141 +85,139 @@ def prompt():
         operation = Operation
     )
 
-    input_ids = torch.tensor([prompt_tokens] * num_beams, device=device)
+    input_ids = torch.tensor([prompt_tokens] * (num_beams*num_token_ranges), device=device)
 
     with torch.no_grad():
-        past_key_values = llama_model(input_ids[:, :-1], return_dict=True).past_key_values
+        global kv_cache
+        global hmm_status
+
+        if tuple(prompt_tokens) not in kv_cache:
+            past_key_values = llama_model(input_ids[:, :-1], return_dict=True).past_key_values
+            kv_cache = {tuple(prompt_tokens): past_key_values}
+        else:
+            past_key_values = kv_cache[tuple(prompt_tokens)]
+
+        current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
+            token_constraint, word_constraint, keyword_constraint, Suffix)
+
+        if current_hmm_status != hmm_status:
+            hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
+                token_constraint, dfa_model)
+            hmm_status = current_hmm_status
 
         model_kwargs = {
             'past_key_values': past_key_values,
         }
 
-        hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
-            token_constraint, dfa_model)
+        hmm_token_ranges = [token_range for token_range in token_constraint for _ in range(num_beams)]
+
+        hmm_config = {
+            'hmm_prompt_len': len(prompt_tokens),
+            'hmm_prefix': prefix_tokens,
+            'hmm_suffix': suffix_tokens,
+            'hmm_generation_offset': len(prefix_tokens),
+            'hmm_token_ranges': hmm_token_ranges,
+            'hmm_batch_size': args.hmm_batch_size,
+        }
+
+        stopping_criteria = StoppingCriteriaList([
+            MaxLengthCriteria(max_length=len(prompt_tokens)+max_tokens)])
+        logits_processor = LogitsProcessorList([
+            ConstraintLogitsProcessor(hmm_model, hmm_config, temperature=temperature)])
+        if no_repeat_ngram_size > 0:
+            logits_processor.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
+
+        # If use beam search
+        if args.do_beam_search:
+            print("Do beam search")
+            beam_scorer = BeamSearchScorer(
+                batch_size=1,
+                num_beams=num_beams,
+                num_beam_hyps_to_keep=num_beams,
+                device=llama_model.device,
+            )
+            outputs= llama_model.beam_search(
+                input_ids,
+                beam_scorer,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                **model_kwargs
+            )
+        else:
+            outputs= llama_model.sample(
+                input_ids,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                **model_kwargs
+            )
+
+        # clean up output, removing padding, eos, and (partial) suffix
+        sequences = outputs.tolist()
+        output_ids = []
+        sequence_ids = []
+        mask1, mask2 = [], []
+        for seq in sequences:
+            seq = seq[len(prompt_tokens):]
+            while seq[-1] == 0:
+                seq = seq[:-1]
+            while seq[-1] == 2:
+                seq = seq[:-1]
+
+            # remove (partial) suffix from generation
+            for i in range(min(len(suffix_tokens), len(seq)), 0, -1):
+                if seq[-i:] == list(suffix_tokens[:i]):
+                    seq = seq[:-i]
+                    break
+
+            output_ids.append(seq)
+            sequence_ids.append(list(prompt_tokens) + list(seq) + list(suffix_tokens))
+
+            check_suffix_len = min(1, len(suffix_tokens))
+
+            mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(seq) + [0.0] * len(suffix_tokens))
+            mask2.append([0.0] * (len(prompt_tokens)+len(seq)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
+
+        # get scores
+        max_len = max([len(x) for x in sequence_ids])
+        sequence_ids = [x + [0] * (max_len - len(x)) for x in sequence_ids]
+        mask1 = [x + [0.0] * (max_len - len(x)) for x in mask1]
+        mask2 = [x + [0.0] * (max_len - len(x)) for x in mask2]
+        sequence_ids = torch.tensor(sequence_ids, device=device)
+        mask1 = torch.tensor(mask1, device=device)
+        mask2 = torch.tensor(mask2, device=device)
+
+        generation_scores, suffix_scores = get_sequence_scores(llama_model,
+            sequence_ids, mask1, mask2, past_key_values)
+
+        # Here to deal with the space after prefix and before suffix by adding the tokens back to decode the entire story, and remove the prefix, suffix text
+        real_prefix_tokens = tokenizer.encode(RawPrefix)
+        real_suffix_tokens = tokenizer.encode(Suffix)
+        outputs_texts = []
+        for output_id in output_ids:
+            if Suffix != '':
+                output_id = real_prefix_tokens + output_id + real_suffix_tokens
+            else:
+                output_id = real_prefix_tokens + output_id + [29889] + real_suffix_tokens
+            output_text = tokenizer.decode(output_id, skip_special_tokens=True)
+            output_text = output_text[len(RawPrefix):] # Remove prefix again
+            if len(Suffix) > 0:
+                output_text = output_text[:-len(Suffix)] # Remove suffix again
+            outputs_texts.append(output_text)
+
+        generation_scores = generation_scores.tolist()
+        suffix_scores = suffix_scores.tolist()
 
         results = []
-
-        # Init logits processors
-        for token_range in token_constraint:
-            min_tokens_, max_tokens_ = token_range
-            max_length = len(prompt_tokens) + max_tokens_
-
-            hmm_config = {
-                'hmm_prompt_len': len(prompt_tokens),
-                'hmm_prefix': prefix_tokens,
-                'hmm_suffix': suffix_tokens,
-                'hmm_generation_offset': len(prefix_tokens),
-                'hmm_min_tokens': min_tokens_,
-                'hmm_max_tokens': max_tokens_,
-                'hmm_batch_size': args.hmm_batch_size,
-            }
-
-            stopping_criteria = StoppingCriteriaList([
-                MaxLengthCriteria(max_length=max_length)])
-            logits_processor = LogitsProcessorList([
-                ConstraintLogitsProcessor(hmm_model, hmm_config, temperature=temperature)])
-            if no_repeat_ngram_size > 0:
-                logits_processor.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
-
-            # If use beam search
-            if args.do_beam_search:
-                print("Do beam search")
-                beam_scorer = BeamSearchScorer(
-                    batch_size=1,
-                    num_beams=num_beams,
-                    num_beam_hyps_to_keep=num_beams,
-                    device=llama_model.device,
-                )
-                outputs= llama_model.beam_search(
-                    input_ids,
-                    beam_scorer,
-                    logits_processor=logits_processor,
-                    stopping_criteria=stopping_criteria,
-                    **model_kwargs
-                )
-            else:
-                outputs= llama_model.sample(
-                    input_ids,
-                    logits_processor=logits_processor,
-                    stopping_criteria=stopping_criteria,
-                    **model_kwargs
-                )
-
-            # clean up output
-            sequences = outputs.tolist()
-            output_ids = []
-            sequence_ids = []
-            mask1, mask2 = [], []
-            for seq in sequences:
-                seq = seq[len(prompt_tokens):]
-                while seq[-1] == 0:
-                    seq = seq[:-1]
-                while seq[-1] == 2:
-                    seq = seq[:-1]
-
-                # remove (partial) suffix from generation
-                for i in range(min(len(suffix_tokens), len(seq)), 0, -1):
-                    if seq[-i:] == list(suffix_tokens[:i]):
-                        seq = seq[:-i]
-                        break
-
-                output_ids.append(seq)
-                sequence_ids.append(list(prompt_tokens) + list(seq) + list(suffix_tokens))
-
-                check_suffix_len = min(1, len(suffix_tokens))
-
-                mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(seq) + [0.0] * len(suffix_tokens))
-                mask2.append([0.0] * (len(prompt_tokens)+len(seq)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
-            
-            max_len = max([len(x) for x in sequence_ids])
-            sequence_ids = [x + [0] * (max_len - len(x)) for x in sequence_ids]            
-            mask1 = [x + [0.0] * (max_len - len(x)) for x in mask1]
-            mask2 = [x + [0.0] * (max_len - len(x)) for x in mask2]
-            sequence_ids = torch.tensor(sequence_ids, device=device)
-            mask1 = torch.tensor(mask1, device=device)
-            mask2 = torch.tensor(mask2, device=device)
-
-            # TODO use both scores
-            # Get returns
-            _, sequences_scores = get_sequence_scores(llama_model,
-                sequence_ids, mask1, mask2, past_key_values)
-
-            # Here to deal with the space after prefix and before suffix by adding the tokens back to decode the entire story, and remove the prefix, suffix text
-            real_prefix_tokens = tokenizer.encode(RawPrefix)
-            real_suffix_tokens = tokenizer.encode(Suffix)
-            outputs_texts = []
-            for output_id in output_ids:
-                if Suffix != '':
-                    output_id = real_prefix_tokens + output_id + real_suffix_tokens
-                else:
-                    output_id = real_prefix_tokens + output_id + [29889] + real_suffix_tokens
-                output_text = tokenizer.decode(output_id, skip_special_tokens=True)
-                output_text = output_text[len(RawPrefix):] # Remove prefix again
-                if len(Suffix) > 0:
-                    output_text = output_text[:-len(Suffix)] # Remove suffix again
-                outputs_texts.append(output_text)
-
-            # outputs_texts = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-            sequence_rank = torch.argsort(sequences_scores, descending=True).tolist()
-
-            output_texts_top_n = []
-            sequences_scores_top_n = []
-            for idx in sequence_rank[:num_return_sequences]:
-                output_texts_top_n.append(outputs_texts[idx])
-                sequences_scores_top_n.append(sequences_scores[idx].item())
-
-            if args.debug:
-                print("-------------------- Top-10 -----------------------")
-                sequence_rank = torch.argsort(sequences_scores, descending=True).tolist()
-                top_k = 64
-                for sequence_idx in sequence_rank[:top_k]:
-                    print(f"#{sequence_idx}: {sequences_scores[sequence_idx]}", outputs_texts[sequence_idx])
-
+        for i, token_range in enumerate(token_constraint):
             results.append({
                 "token_range": token_range,
-                "beam_outputs_texts": output_texts_top_n,
-                "beam_outputs_sequences_scores": sequences_scores_top_n,
+                "beam_outputs_texts": [outputs_texts[i * num_beams + j] for j in range(0, num_beams)],
+                "beam_outputs_sequences_scores_generation": [generation_scores[i * num_beams + j] for j in range(0, num_beams)],
+                "beam_outputs_sequences_scores_suffix": [suffix_scores[i * num_beams + j] for j in range(0, num_beams)],
             })
+
+        print(results)
+
 
     return results
 
@@ -239,11 +241,7 @@ def init():
 
     args = arg_parser.parse_args()
     device = args.device
-    # device = f"{args.device}:{args.cuda_core}"
-    # print(device)
-    # print(torch.cuda.is_available())
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_core
-    # torch.cuda.set_device(int(args.cuda_core))
+
 
 def load_models():
     global tokenizer
