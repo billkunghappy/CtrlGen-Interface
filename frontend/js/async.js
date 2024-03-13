@@ -476,7 +476,7 @@ function queryTokenRange() {
           // For token length control, don't need this. Instead, we need to do things
           // addSuggestionsToDropdown(data.suggestions_with_probabilities);
           // showDropdownMenu('api');
-          update_token_output_list(data.original_suggestions);
+          update_token_output_list(data.suggestions_with_probabilities);
           token_loaded_success();
         } else {
           let msg = 'Please try again!\n\n'

@@ -250,6 +250,7 @@ def query():
                 )
                 probability = parse_probability(choice.logprobs)
                 suggestions.append((suggestion, probability, engine))
+            suggestions_list = [suggestions]
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
@@ -276,8 +277,10 @@ def query():
                 DO_TOKEN_RANGE = True
                 # Set return sequence num `n` to the number of token_range
                 n = len(content['token_range_list'])
+                # When querying various token length, we remove the word constraints
+                word_range = []
             else:
-                token_constraint = [1, max_tokens]
+                token_constraint = [[1, max_tokens]]
                 DO_TOKEN_RANGE = False
             request_json = {
                 # Input Text
@@ -286,13 +289,13 @@ def query():
                 "Prior": selected,
                 # Constraints
                 "Instruct": content['instruct'],
-                'word_contraint': word_range,
+                'word_constraint': word_range,
                 'keyword_constraint': [k.strip() for k in content['keyword'].split(";") if k.strip() != ""], # TODO: Add this
                 # General Config.
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
                 'num_return_sequences': args.num_beams, # We will return all the generated results, and filter here
-                'num_beams': args.num_beams, 
+                'num_beams': max(1, args.num_beams // len(token_constraint)), 
                 'no_repeat_ngram_size': -1, 
                 'top_p': top_p,
                 'token_constraint': token_constraint
@@ -317,11 +320,10 @@ def query():
                     beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
                     beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
                     sleep(5)
+                beam_results_list = [beam_results]
             # ---------- End debug 
             else:
                 # https://stackoverflow.com/questions/9110593/asynchronous-requests-with-python-requests
-                outputs_texts = []
-                outputs_sequences_scores = []
                 #  Query local models
                 async def async_aiohttp_post_all(urls, data_list):
                     async with aiohttp.ClientSession() as session:
@@ -336,63 +338,127 @@ def query():
                 print(f"Sending Post Request to Servers:", local_model_server_list)
                 result_text_list = asyncio.run(async_aiohttp_post_all(local_model_server_list, [request_json] * len(local_model_server_list)))
                 print(f"Results Fetched...")
+                # --------------------- Gather results -----------------------
+                # results = [{
+                #     "token_range": [int, int]],
+                #     "beam_outputs_texts": [str],
+                #     "beam_outputs_sequences_scores_generation": [float],
+                #     "beam_outputs_sequences_scores_suffix": [float],
+                # }, ...]
+                all_token_range_output = {}
                 for result_text in result_text_list:
                     result_data = json.loads(result_text)
-                    outputs_texts += result_data['beam_outputs_texts']
-                    outputs_sequences_scores += result_data['beam_outputs_sequences_scores']
+                    # result_data is a list, each item is the results of a token_range.
+                    for result_data_per_token_range in result_data:
+                        token_range_str = json.dumps(result_data_per_token_range["token_range"])
+                        if not (token_range_str in all_token_range_output):
+                            all_token_range_output[token_range_str] = {}
+                        if 'beam_outputs_texts' in all_token_range_output[token_range_str]:
+                            all_token_range_output[token_range_str]['beam_outputs_texts'] += result_data_per_token_range['beam_outputs_texts']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] += result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] += result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                        else: #Init
+                            all_token_range_output[token_range_str]['beam_outputs_texts'] = result_data_per_token_range['beam_outputs_texts']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] = result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] = result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                # print("Gathered Results:", all_token_range_output)
+                # Check
+                retrieved_token_ranges = list(all_token_range_output.keys())
+                requested_token_ranges = [json.dumps(token_range) for token_range in token_constraint]
+                if requested_token_ranges != retrieved_token_ranges:
+                    print("Warning, the retrieved token_range does not match the one we sent out.")
+                    print("Requested Token Range:", requested_token_ranges)
+                    print("Retrieved Token Range:", retrieved_token_ranges)
+                else:
+                    print("Correct Token Range!")
+                
                 # Sort the results
-                outputs_sequences_scores = (-np.array(outputs_sequences_scores)).argsort()
+                def sort_results(text_list, score_A_list, score_B_list):
+                    ranked_text = []
+                    ranked_score = []
+                    # We implement a simpler verison, that simply first multply the scores. Since it's logprob, we add it
+                    score_list = [a+b for a,b in zip(score_A_list, score_B_list)]
+                    # Get the rank
+                    score_rank = (-np.array(score_list)).argsort()
+                    for idx in score_rank:
+                        ranked_text.append(text_list[idx])
+                        ranked_score.append(score_list[idx])
+                    return ranked_text, ranked_score
+                # Now we use a list to store it
+                beam_results_list = []
+                for token_range_str, result_data_per_token_range in all_token_range_output.items():
+                    # For each token length, we sort it
+                    ranked_text, ranked_score = sort_results(
+                        result_data_per_token_range['beam_outputs_texts'],
+                        result_data_per_token_range['beam_outputs_sequences_scores_generation'],
+                        result_data_per_token_range['beam_outputs_sequences_scores_suffix'],
+                    )
+                    beam_results_list.append({
+                        'beam_outputs_texts' : ranked_text,
+                        'beam_outputs_sequences_scores' : ranked_score,
+                    })
+            suggestions_list = []
+            for beam_results in beam_results_list:
+                suggestions = []
                 
-                # Get the sorted results
-                beam_results = {
-                    'beam_outputs_texts' : [],
-                    'beam_outputs_sequences_scores' : [],
-                }
-                for idx in outputs_sequences_scores:
-                    beam_results['beam_outputs_texts'].append(outputs_texts[idx])
-                    beam_results['beam_outputs_sequences_scores'].append(outputs_sequences_scores[idx].item())
-            
-            suggestions = []
-            
-            # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
-            if not (suffix.strip() == '' and selected.strip() == ''):
-                stop_rules = []
-                
-            for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
-                suggestion = parse_suggestion(
-                    choice_text,
-                    results['after_prompt'],
-                    stop_rules
-                )
-                probability = (np.e**log_prob) * 100
-                suggestions.append((suggestion, probability, engine))
+                # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
+                if (not (suffix.strip() == '' and selected.strip() == '')) and (not DO_TOKEN_RANGE):
+                    stop_rules = []
+                    
+                for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
+                    suggestion = parse_suggestion(
+                        choice_text,
+                        results['after_prompt'],
+                        stop_rules
+                    )
+                    probability = (np.e**log_prob) * 100
+                    suggestions.append((suggestion, probability, engine))
+                suggestions_list.append(suggestions)
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
             print(e)
             return jsonify(results)
-
-    # Always return original model outputs
+    # Got the results from GPT or local models, in suggestions_list        
     original_suggestions = []
-    for index, (suggestion, probability, source) in enumerate(suggestions):
-        original_suggestions.append({
-            'original': suggestion,
-            'trimmed': suggestion.strip(),
-            'probability': probability,
-            'source': source,
-        })
+    filtered_suggestions = []
+    counts = {
+        'empty_cnt' : 0,
+        'duplicate_cnt': 0,
+        'bad_cnt': 0
+    }
+    for suggestions in suggestions_list:
+        # Always return original model outputs
+        original_suggestions_ = []
+        for index, (suggestion, probability, source) in enumerate(suggestions):
+            original_suggestions_.append({
+                'original': suggestion,
+                'trimmed': suggestion.strip(),
+                'probability': probability,
+                'source': source,
+            })
 
-    # Filter out model outputs for safety
-    filtered_suggestions, counts = filter_suggestions(
-        suggestions,
-        prev_suggestions,
-        blocklist,
-    )
+        # Filter out model outputs for safety
+        filtered_suggestions_, counts_ = filter_suggestions(
+            suggestions,
+            prev_suggestions,
+            blocklist,
+        )
+        # Get the num_return_sequence of highest prob sequence here
+        if DO_TOKEN_RANGE:
+            trunc_len = 1
+        else:
+            trunc_len = n
+        filtered_suggestions_ = filtered_suggestions_[:trunc_len]
+        # Combine the results
+        original_suggestions += original_suggestions_
+        filtered_suggestions += filtered_suggestions_
+        counts['empty_cnt'] += counts_['empty_cnt']
+        counts['duplicate_cnt'] += counts_['duplicate_cnt']
+        counts['bad_cnt'] += counts_['bad_cnt']
 
-    # Get the num_return_sequence of highest prob sequence here
-    filtered_suggestions = filtered_suggestions[:n]
     print("Suggestions: ", json.dumps(filtered_suggestions, indent = 4))
-    random.shuffle(filtered_suggestions)
+    # random.shuffle(filtered_suggestions)
 
     suggestions_with_probabilities = []
     for index, (suggestion, probability, source) in enumerate(filtered_suggestions):

@@ -57,7 +57,7 @@ def prompt_(input_json):
     top_p = input_json['top_p']
 
     # TODO Maybe we should let model_server decide token_constraint based on word_constraint?
-    if word_constraint != []:
+    if len(word_constraint) != 0:
         max_tokens = max(max_tokens, int(1.5 * word_constraint[1]))
 
     # Get prefix, suffix tokens for HMM
