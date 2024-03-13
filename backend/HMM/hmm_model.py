@@ -291,7 +291,6 @@ class HMM(nn.Module):
                 log_prob = logsumexp(A[prefix_idx] + B_cache[offset], dim=0)
                 logits[prefix_idx, suffix[offset]] = torch.logaddexp(logits[prefix_idx, suffix[offset]], log_prob)
 
-
         # compute normalizing constant; no hmm mini-batch here
         logits_ = matmul_log(A, beta)
 

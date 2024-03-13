@@ -32,13 +32,18 @@ hmm_status = None
 def prompt():
     # Get the text and operation
     input_json = request.json
+    return prompt_(input_json)
+
+
+def prompt_(input_json):
     RawPrefix, Prior, Suffix, Instruct = input_json['Prefix'], input_json['Prior'], input_json['Suffix'], input_json['Instruct']
     Prefix = RawPrefix.rstrip(" ")
+
     Operation = get_operation(
         Prefix,
         Prior,
         Suffix,
-        llama_insertion = args.llama_insertion # If set to true, use "Insertion" for the insertion prompt
+        llama_insertion=args.llama_insertion # If set to true, use "Insertion" for the insertion prompt
     )
     # Get the constraints
     token_constraint, word_constraint, keyword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"]
@@ -47,7 +52,6 @@ def prompt():
 
     # Get generation config
     temperature = input_json['temperature']
-    num_return_sequences = input_json['num_return_sequences']
     num_beams = input_json['num_beams']
     no_repeat_ngram_size = input_json['no_repeat_ngram_size']
     top_p = input_json['top_p']
@@ -91,19 +95,26 @@ def prompt():
         global kv_cache
         global hmm_status
 
-        if tuple(prompt_tokens) not in kv_cache:
-            past_key_values = llama_model(input_ids[:, :-1], return_dict=True).past_key_values
+        if tuple(prompt_tokens) not in kv_cache:            
+            past_key_values = llama_model(torch.tensor([prompt_tokens], device=device)).past_key_values
             kv_cache = {tuple(prompt_tokens): past_key_values}
         else:
+            print('cache hit!', num_beams*num_token_ranges)
             past_key_values = kv_cache[tuple(prompt_tokens)]
+
+        # expand past_key_values to match the desired batch size
+        past_key_values = tuple([tuple([col.expand(num_beams*num_token_ranges, -1, -1, -1).contiguous()
+            for col in row]) for row in past_key_values])
 
         current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
             token_constraint, word_constraint, keyword_constraint, Suffix)
 
-        if current_hmm_status != hmm_status:
+        if current_hmm_status != hmm_status:            
             hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
                 token_constraint, dfa_model)
             hmm_status = current_hmm_status
+        else:
+            print('cache hit!')
 
         model_kwargs = {
             'past_key_values': past_key_values,
@@ -191,17 +202,16 @@ def prompt():
 
         # Here to deal with the space after prefix and before suffix by adding the tokens back to decode the entire story, and remove the prefix, suffix text
         real_prefix_tokens = tokenizer.encode(RawPrefix)
-        real_suffix_tokens = tokenizer.encode(Suffix)
         outputs_texts = []
         for output_id in output_ids:
             if Suffix != '':
-                output_id = real_prefix_tokens + output_id + real_suffix_tokens
+                output_id = real_prefix_tokens + output_id
             else:
-                output_id = real_prefix_tokens + output_id + [29889] + real_suffix_tokens
+                output_id = real_prefix_tokens + output_id + [29889]
             output_text = tokenizer.decode(output_id, skip_special_tokens=True)
             output_text = output_text[len(RawPrefix):] # Remove prefix again
-            if len(Suffix) > 0:
-                output_text = output_text[:-len(Suffix)] # Remove suffix again
+            if len(Suffix) > 0 and Suffix[0] != ' ':
+                output_text = output_text + ' '
             outputs_texts.append(output_text)
 
         generation_scores = generation_scores.tolist()
@@ -276,6 +286,23 @@ def load_models():
 if __name__ == '__main__':
     init()
     load_models()
+
+    # warmup
+    print('warming up model server...')
+    prompt_({
+        "Prefix": 'This is a test',
+        "Suffix": 'to warm up the model server.',
+        "Prior": '',
+        "Instruct": 'Continuation',
+        'word_constraint': [],
+        'keyword_constraint': [],
+        'token_constraint': [[1, 8]],
+        'temperature': 0.8,
+        'num_beams': 4,
+        'no_repeat_ngram_size': -1,
+        'top_p': 1.0,
+    })
+
     app.run(
         host='0.0.0.0',
         port=args.port,

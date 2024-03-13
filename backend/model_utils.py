@@ -77,9 +77,8 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
 
     if suffix != '':
         # Cannot strip the suffix at the start. Need to keep the \n
-        if suffix[0] == " ":
-            suffix = suffix[1:]
-        suffix_tokens = tokenizer.encode(suffix.rstrip(" "))[1:] # Strip the right side
+        suffix = suffix.lstrip(' ')
+        suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:] # Strip the right side
         if suffix_tokens[0] == 29871:
             suffix_tokens = suffix_tokens[1:]
         suffix_tokens = tuple(suffix_tokens + [2])
