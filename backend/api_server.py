@@ -265,6 +265,10 @@ def query():
             else:
                 # TODO: Implement word constraints, to get a range
                 word_range = (max(0, int(content['length']) -5) , max(int(content['length']), 1))
+
+            step = 3
+            token_constraint = [[i, i + step - 1] for i in range(1, 32, step)]
+
             request_json = {
                 # Input Text
                 "Prefix": prefix,
@@ -272,21 +276,25 @@ def query():
                 "Prior": selected,
                 # Constraints
                 "Instruct": content['instruct'],
-                'word_contraint': word_range,
+                'word_constraint': word_range,
                 'keyword_constraint': [k.strip() for k in content['keyword'].split(";") if k.strip() != ""], # TODO: Add this
                 # General Config.
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
                 'num_return_sequences': n,
-                'num_beams': 64, 
+                'num_beams': random.randint(4, 8), 
                 'no_repeat_ngram_size': -1, 
                 'top_p': top_p,
-                'token_constraint': [1, max_tokens]
+                'token_constraint': token_constraint
             }
 
             print(request_json)
-            r = requests.post(f'http://{args.local_model_server}/prompt/', json = request_json)
+            r = requests.post(f'http://{args.local_model_server}/prompt/', json=request_json)
             beam_results = json.loads(r.text)
+            print('------------------------------------------------------------')
+            print(beam_results)
+            print('------------------------------------------------------------')
+            beam_results = beam_results[0]
             # ---------- Start debug 
             # beam_results = {}
             # beam_results['beam_outputs_texts'] = [
@@ -304,7 +312,7 @@ def query():
             if not (suffix.strip() == '' and selected.strip() == ''):
                 stop_rules = []
                 
-            for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
+            for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores_generation']):
                 suggestion = parse_suggestion(
                     choice_text,
                     results['after_prompt'],
