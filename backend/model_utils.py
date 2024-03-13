@@ -71,8 +71,9 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
 
     prefix_tokens = tokenizer.encode(prefix)[1:]
     # 3. Remove additional SPIECE_UNDERLINE token(29871)
-    if prefix_tokens[-1] == 29871:
-        prefix_tokens = prefix_tokens[:-1]
+    if len(prefix_tokens) > 0:
+        if prefix_tokens[-1] == 29871:
+            prefix_tokens = prefix_tokens[:-1]
     prefix_tokens = tuple(prefix_tokens)
 
     if suffix != '':

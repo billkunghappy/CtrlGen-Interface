@@ -10,7 +10,7 @@ import openai
 import warnings
 import numpy as np
 import json
-from time import time
+from time import time, sleep
 from argparse import ArgumentParser
 # For Local Model
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -34,7 +34,8 @@ from parsing import (
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
-import requests
+import aiohttp
+import asyncio
 
 warnings.filterwarnings("ignore", category=FutureWarning)  # noqa
 
@@ -207,7 +208,7 @@ def query():
     suffix = doc[content['cursor_index'] + content['cursor_length']:]
     results = parse_prompt(example_text + prefix, max_tokens, context_window_size)
     prompt = results['effective_prompt']
-    if args.local_model_server is None:
+    if not args.use_local_model:
         print("Querying OpenAI...")
         # Query GPT-3
         try:
@@ -249,6 +250,7 @@ def query():
                 )
                 probability = parse_probability(choice.logprobs)
                 suggestions.append((suggestion, probability, engine))
+            suggestions_list = [suggestions]
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
@@ -263,12 +265,23 @@ def query():
             if word_control_type == "none":
                 word_range = []
             else:
-                # TODO: Implement word constraints, to get a range
-                word_range = (max(0, int(content['length']) -5) , max(int(content['length']), 1))
-
-            step = 3
-            token_constraint = [[i, i + step - 1] for i in range(1, 32, step)]
-
+                word_range = (
+                    min(int(content['length'][0]), int(content['length'][1])),
+                    max(int(content['length'][0]), int(content['length'][1]))
+                )
+            if len(content['token_range_list']) > 0 and len(content['token_range_list'][0]) == 2:
+                # Have token range list. By default it is empty list []
+                # If have token range list, we are doing token length control with multiple settings
+                # TODO: When the len of token_range_list cannot be divided by args.num_beams, there might be some issues
+                token_constraint = content['token_range_list']
+                DO_TOKEN_RANGE = True
+                # Set return sequence num `n` to the number of token_range
+                n = len(content['token_range_list'])
+                # When querying various token length, we remove the word constraints
+                word_range = []
+            else:
+                token_constraint = [[1, max_tokens]]
+                DO_TOKEN_RANGE = False
             request_json = {
                 # Input Text
                 "Prefix": prefix,
@@ -281,69 +294,171 @@ def query():
                 # General Config.
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
-                'num_return_sequences': n,
-                'num_beams': random.randint(4, 8), 
+                'num_return_sequences': args.num_beams, # We will return all the generated results, and filter here
+                'num_beams': max(1, args.num_beams // len(token_constraint)), 
                 'no_repeat_ngram_size': -1, 
                 'top_p': top_p,
                 'token_constraint': token_constraint
             }
-
             print(request_json)
-            r = requests.post(f'http://{args.local_model_server}/prompt/', json=request_json)
-            beam_results = json.loads(r.text)
-            print('------------------------------------------------------------')
-            print(beam_results)
-            print('------------------------------------------------------------')
-            beam_results = beam_results[0]
-            # ---------- Start debug 
-            # beam_results = {}
-            # beam_results['beam_outputs_texts'] = [
-            #     "No Space",
-            #     " Start Space",
-            #     "End Space ",
-            #     " Both Space ",
-            #     "XXX"
-            # ]
-            # beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.1]
+                        # ---------- Start debug
+            if args.debug_frontend:
+                if not DO_TOKEN_RANGE:
+                    beam_results = {}
+                    beam_results['beam_outputs_texts'] = [
+                        "No Space",
+                        " Start Space",
+                        "End Space ",
+                        " Both Space ",
+                        "XXX",
+                        "AAA"
+                    ]
+                    beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.2, 0.1]
+                    sleep(2)
+                else:
+                    beam_results = {}
+                    beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
+                    beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
+                    sleep(5)
+                beam_results_list = [beam_results]
             # ---------- End debug 
-            suggestions = []
-            
-            # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
-            if not (suffix.strip() == '' and selected.strip() == ''):
-                stop_rules = []
+            else:
+                # https://stackoverflow.com/questions/9110593/asynchronous-requests-with-python-requests
+                #  Query local models
+                async def async_aiohttp_post_all(urls, data_list):
+                    async with aiohttp.ClientSession() as session:
+                        async def fetch(url, data):
+                            print(f"Fetching {url}")
+                            async with session.post(url, json=data) as response:
+                                return await response.text()
+                        return await asyncio.gather(*[
+                            fetch(url, data) for url, data in zip(urls, data_list)
+                        ])
+                # Running Async
+                print(f"Sending Post Request to Servers:", local_model_server_list)
+                result_text_list = asyncio.run(async_aiohttp_post_all(local_model_server_list, [request_json] * len(local_model_server_list)))
+                print(f"Results Fetched...")
+                # --------------------- Gather results -----------------------
+                # results = [{
+                #     "token_range": [int, int]],
+                #     "beam_outputs_texts": [str],
+                #     "beam_outputs_sequences_scores_generation": [float],
+                #     "beam_outputs_sequences_scores_suffix": [float],
+                # }, ...]
+                all_token_range_output = {}
+                for result_text in result_text_list:
+                    result_data = json.loads(result_text)
+                    # result_data is a list, each item is the results of a token_range.
+                    for result_data_per_token_range in result_data:
+                        token_range_str = json.dumps(result_data_per_token_range["token_range"])
+                        if not (token_range_str in all_token_range_output):
+                            all_token_range_output[token_range_str] = {}
+                        if 'beam_outputs_texts' in all_token_range_output[token_range_str]:
+                            all_token_range_output[token_range_str]['beam_outputs_texts'] += result_data_per_token_range['beam_outputs_texts']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] += result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] += result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                        else: #Init
+                            all_token_range_output[token_range_str]['beam_outputs_texts'] = result_data_per_token_range['beam_outputs_texts']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] = result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] = result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                # print("Gathered Results:", all_token_range_output)
+                # Check
+                retrieved_token_ranges = list(all_token_range_output.keys())
+                requested_token_ranges = [json.dumps(token_range) for token_range in token_constraint]
+                if requested_token_ranges != retrieved_token_ranges:
+                    print("Warning, the retrieved token_range does not match the one we sent out.")
+                    print("Requested Token Range:", requested_token_ranges)
+                    print("Retrieved Token Range:", retrieved_token_ranges)
+                else:
+                    print("Correct Token Range!")
                 
-            for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores_generation']):
-                suggestion = parse_suggestion(
-                    choice_text,
-                    results['after_prompt'],
-                    stop_rules
-                )
-                probability = (np.e**log_prob) * 100
-                suggestions.append((suggestion, probability, engine))
+                # Sort the results
+                def sort_results(text_list, score_A_list, score_B_list):
+                    ranked_text = []
+                    ranked_score = []
+                    # We implement a simpler verison, that simply first multply the scores. Since it's logprob, we add it
+                    score_list = [a+b for a,b in zip(score_A_list, score_B_list)]
+                    # Get the rank
+                    score_rank = (-np.array(score_list)).argsort()
+                    for idx in score_rank:
+                        ranked_text.append(text_list[idx])
+                        ranked_score.append(score_list[idx])
+                    return ranked_text, ranked_score
+                # Now we use a list to store it
+                beam_results_list = []
+                for token_range_str, result_data_per_token_range in all_token_range_output.items():
+                    # For each token length, we sort it
+                    ranked_text, ranked_score = sort_results(
+                        result_data_per_token_range['beam_outputs_texts'],
+                        result_data_per_token_range['beam_outputs_sequences_scores_generation'],
+                        result_data_per_token_range['beam_outputs_sequences_scores_suffix'],
+                    )
+                    beam_results_list.append({
+                        'beam_outputs_texts' : ranked_text,
+                        'beam_outputs_sequences_scores' : ranked_score,
+                    })
+            suggestions_list = []
+            for beam_results in beam_results_list:
+                suggestions = []
+                
+                # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
+                if (not (suffix.strip() == '' and selected.strip() == '')) and (not DO_TOKEN_RANGE):
+                    stop_rules = []
+                    
+                for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
+                    suggestion = parse_suggestion(
+                        choice_text,
+                        results['after_prompt'],
+                        stop_rules
+                    )
+                    probability = (np.e**log_prob) * 100
+                    suggestions.append((suggestion, probability, engine))
+                suggestions_list.append(suggestions)
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
             print(e)
             return jsonify(results)
-
-    # Always return original model outputs
+    # Got the results from GPT or local models, in suggestions_list        
     original_suggestions = []
-    for index, (suggestion, probability, source) in enumerate(suggestions):
-        original_suggestions.append({
-            'original': suggestion,
-            'trimmed': suggestion.strip(),
-            'probability': probability,
-            'source': source,
-        })
+    filtered_suggestions = []
+    counts = {
+        'empty_cnt' : 0,
+        'duplicate_cnt': 0,
+        'bad_cnt': 0
+    }
+    for suggestions in suggestions_list:
+        # Always return original model outputs
+        original_suggestions_ = []
+        for index, (suggestion, probability, source) in enumerate(suggestions):
+            original_suggestions_.append({
+                'original': suggestion,
+                'trimmed': suggestion.strip(),
+                'probability': probability,
+                'source': source,
+            })
 
-    # Filter out model outputs for safety
-    filtered_suggestions, counts = filter_suggestions(
-        suggestions,
-        prev_suggestions,
-        blocklist,
-    )
+        # Filter out model outputs for safety
+        filtered_suggestions_, counts_ = filter_suggestions(
+            suggestions,
+            prev_suggestions,
+            blocklist,
+        )
+        # Get the num_return_sequence of highest prob sequence here
+        if DO_TOKEN_RANGE:
+            trunc_len = 1
+        else:
+            trunc_len = n
+        filtered_suggestions_ = filtered_suggestions_[:trunc_len]
+        # Combine the results
+        original_suggestions += original_suggestions_
+        filtered_suggestions += filtered_suggestions_
+        counts['empty_cnt'] += counts_['empty_cnt']
+        counts['duplicate_cnt'] += counts_['duplicate_cnt']
+        counts['bad_cnt'] += counts_['bad_cnt']
 
-    random.shuffle(filtered_suggestions)
+    print("Suggestions: ", json.dumps(filtered_suggestions, indent = 4))
+    # random.shuffle(filtered_suggestions)
 
     suggestions_with_probabilities = []
     for index, (suggestion, probability, source) in enumerate(filtered_suggestions):
@@ -426,15 +541,29 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, required=True)
     parser.add_argument('--port', type=int, required=True)
     parser.add_argument('--proj_name', type=str, required=True)
-    parser.add_argument('--local_model_server',
+    parser.add_argument('--use_local_model', action='store_true')
+    parser.add_argument('--local_model_server_ip',
+                        type=str,
+                        default="127.0.0.1",
+                        help="Specify the local model ip. For example, 127.0.0.1")
+    parser.add_argument('--local_model_server_func',
+                        type=str,
+                        default="prompt/",
+                        help="Specify the function/url to query the server model")
+    parser.add_argument('--local_model_server_port',
                         type=str,
                         default=None,
-                        help="Specify the local model ip and port. For example, 127.0.0.1:8888")
-
+                        help="Specify the local model port. For example, 8888")
+    parser.add_argument('--local_model_server_port_file',
+                        type=str,
+                        default="../config/model_ports.txt",
+                        help="Specify the local model port file. In this file, each line should have a number, which is the port. Should be specify together with local_model_server_port")
     # Optional arguments
+    parser.add_argument('--num_beams', type=int, default = 64, help = "The beam size or the number of returned samples for local model.")
     parser.add_argument('--replay_dir', type=str, default='../logs')
 
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--debug_frontend', action='store_true', help = "If specifid, will use fake data instead of really query the model servers.")
     parser.add_argument('--verbose', action='store_true')
 
     parser.add_argument('--use_blocklist', action='store_true')
@@ -442,6 +571,21 @@ if __name__ == '__main__':
     global args
     args = parser.parse_args()
 
+    # Get Local Model Servers
+    global local_model_server_list
+    local_model_server_list = []
+    if args.local_model_server_port != None:
+        print(f"Warning: args.local_model_server_port is set to {args.local_model_server_port}. When the port is manually set, we do not use the ports in args.local_model_server_port_file, which is {args.local_model_server_port_file}")
+        local_model_server_list = [f"{args.local_model_server_ip}:{args.local_model_server_port}"]
+    else:
+        for line in open(args.local_model_server_port_file, "r").readlines():
+            port = int(line.strip())
+            local_model_server_list.append(f"http://{args.local_model_server_ip}:{port}/{args.local_model_server_func}")
+    # Check exist local model server if args.use_local_model is True
+    if args.use_local_model:
+        assert len(local_model_server_list) > 0, "ERROR: args.use_local_model is set to True, but there're no item in local_model_server_list"
+        print("Use Local Model Servers: ", local_model_server_list)
+    
     # Create a project directory to store logs
     global config_dir, proj_dir
     config_dir = args.config_dir

@@ -1,4 +1,2 @@
-domain,example,prompt,access_code,session_length,n,max_tokens,temperature,top_p,presence_penalty,frequency_penalty,stop,engine,additional_data
-demo,na,na,demo,0,5,64,0.8,1,0.5,0.5,.,gpt-3.5-turbo-instruct,na
-creative,na,na,low_randomness,0,5,30,0.3,1,0,0,.,davinci,na
-creative,na,na,high_randomness,0,5,30,0.75,1,0,1,.,davinci,na
+domain,example,prompt,access_code,session_length,n,max_tokens,temperature,top_p,presence_penalty,frequency_penalty,ctrl_keyword,ctrl_length_type,ctrl_length_range_start,ctrl_length_range_end,stop,engine,additional_data
+demo,na,na,demo,0,5,64,0.8,1,0.5,0.5,na,None,10,20,.,gpt-3.5-turbo-instruct,na

@@ -13,7 +13,7 @@ $(function() {
   ctrl = getControl(); // &ctrl=show
   if (ctrl.includes("show")){
     // Show control switch
-    $('#ctrl-switch-wrapper').parent().css('display', 'block')
+    $('#control-panel-btn').css('display', 'block')
     $('#ctrl-switch').click(function(e) {
       $('#control').toggleClass('slideright');
     });

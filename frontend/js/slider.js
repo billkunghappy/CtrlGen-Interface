@@ -33,15 +33,21 @@ function InitSlider(){
     ctrl_len_slider.disabled(true);
 
     ctrl_token_slider = rangeSlider(document.querySelector('#ctrl-token-slider'), {
-        "min": 1,
-        "max": 64,
-        "step" : 2,
+        "min": ctrl_token_range_min,
+        "max": ctrl_token_range_max,
+        "step" : ctrl_token_range_step,
         "value" : [0, 1], // For one value slider, first value needs to be 0
         thumbsDisabled: [true, false],
         rangeSlideDisabled: true,
         "onInput": (value, userInteraction) => {
             // Update the text value
             SetThumbText(ctrl_token_slider, '#ctrl-token-slider', single_range = true);
+            if (userInteraction){
+                // User trigger the value change
+                text = token_slider_output_dict[value[1]]
+                console.log(text);
+                appendText(text);
+            }
         }
     });
     SetThumbText(ctrl_token_slider, '#ctrl-token-slider', single_range = true);
