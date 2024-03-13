@@ -2,3 +2,7 @@ api_keys.csv
 logs/*
 venv/*
 *.pyc
+frontend/js/config.js
+frontend/start_frontend.sh
+backend/start_backend.sh
+backend/start_model.sh
