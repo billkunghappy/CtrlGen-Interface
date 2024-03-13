@@ -116,3 +116,10 @@ if (condition == 'human') {
 } else {
   console.log('Condition (URL): human-and-machine');
 }
+
+/***************************************************************/
+/****** Control *************************************************/
+/***************************************************************/
+var ctrl_token_range_min = 1;
+var ctrl_token_range_max = 32;
+var ctrl_token_range_step = 2;

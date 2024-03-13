@@ -309,9 +309,9 @@ async function saveLogs() {
 // Query
 ////////////////////////////////////////////////////////////////////////////////
 
-function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
+function getDataForQuery(doc, exampleText, cursor_index, cursor_length, token_range_list = []) {
   // Check if the ctrl switch is checked. If not, don't send HMM control
-  if ($("#ctrl-switch").is(':checked')){
+  if (apply_control()){
     // n = $("#ctrl-n").val();
     // max_tokens = $("#ctrl-max_tokens").val();
     // temperature = $("#ctrl-temperature").val();
@@ -355,6 +355,8 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
     'length_unit': length_unit,
     'length': length,
     'instruct': instruct,
+    // By default, it is empty, which means that we do not do token length constraints
+    'token_range_list': token_range_list,
     'engine': engine,
 
     'suggestions': getSuggestionState(),
@@ -366,9 +368,16 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length) {
 function queryGPT3() {
   const doc = getText();
   // get the selected range
-  let range = quill.getSelection();;
+  let range = quill.getSelection();
   const exampleText = exampleActualText;
   const data = getDataForQuery(doc, exampleText, range.index, range.length);
+  if (range.length > 0){
+    // Store the to rewrite part
+    update_to_rewrite(range.index, range.length);
+  }
+  else{
+    reset_to_rewrite();
+  }
 
   $.ajax({
     url: serverURL + '/api/query',
@@ -418,6 +427,79 @@ function queryGPT3() {
     error: function() {
       hideLoadingSignal();
       alert("Could not get suggestions. Press tab key to try again! If the problem persists, please send a screenshot of this message to " + contactEmail + ". Our sincere apologies for the inconvenience!");
+    }
+  });
+}
+
+function get_token_range_list(){
+  token_range_list = new Array();
+  for (i = ctrl_token_range_min; i < ctrl_token_range_max; i+=ctrl_token_range_step) {
+    token_range_list.push([i, i+ctrl_token_range_step]);
+  }
+  return token_range_list;
+}
+
+function queryTokenRange() {
+  const doc = getText();
+  // get the selected range
+  let range = quill.getSelection();;
+  const exampleText = exampleActualText;
+  const data = getDataForQuery(doc, exampleText, range.index, range.length, token_range_list = get_token_range_list());
+  // Here we add special 
+
+  $.ajax({
+    url: serverURL + '/api/query',
+    // beforeSend: function() {
+      // hideDropdownMenu(EventSource.API);
+      // setCursorAtTheEnd();
+      // showLoadingSignal('Getting suggestions...');
+    // },
+    type: 'POST',
+    dataType: 'json',
+    data: JSON.stringify(data),
+    crossDomain: true,
+    contentType: 'application/json; charset=utf-8',
+    success: function(data) {
+      if (data.status == SUCCESS) {
+        if (data.original_suggestions.length > 0) {
+          originalSuggestions = data.original_suggestions;
+        } else {
+          originalSuggestions = [];
+        }
+
+        if (data.suggestions_with_probabilities.length > 0) {
+          let msg = 'Showing the suggestion stats!\n\n'
+                    + '- could not think of suggestions (' + data.counts.empty_cnt + ')\n'
+                    + '- generated same suggestions as before (' + data.counts.duplicate_cnt + ')\n'
+                    + '- generated suggestions that contained banned words (' + data.counts.bad_cnt + ')\n';
+          console.log(msg);
+          // For token length control, don't need this. Instead, we need to do things
+          // addSuggestionsToDropdown(data.suggestions_with_probabilities);
+          // showDropdownMenu('api');
+          update_token_output_list(data.original_suggestions);
+          token_loaded_success();
+        } else {
+          let msg = 'Please try again!\n\n'
+                    + 'Why is this happening? The system\n'
+                    + '- could not think of suggestions (' + data.counts.empty_cnt + ')\n'
+                    + '- generated same suggestions as before (' + data.counts.duplicate_cnt + ')\n'
+                    + '- generated suggestions that contained banned words (' + data.counts.bad_cnt + ')\n';
+          console.log(msg);
+
+          logEvent(EventName.SUGGESTION_FAIL, EventSource.API, textDelta=msg);
+          alert("The system could not generate suggestions. Please try again.");
+          token_loaded_failed();
+        }
+
+      } else {
+        alert(data.message);
+        token_loaded_failed();
+      }
+    },
+    error: function() {
+      hideLoadingSignal();
+      alert("Could not get token range suggestions! If the problem persists, please send a screenshot of this message to " + contactEmail + ". Our sincere apologies for the inconvenience!");
+      token_loaded_failed();
     }
   });
 }

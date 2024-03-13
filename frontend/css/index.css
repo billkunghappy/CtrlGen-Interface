@@ -74,7 +74,8 @@ html, body {
   right: 0%;
   /* display: none; */
   opacity: 0.8;
-  overflow-y: scroll;
+  overflow: visible;
+  /* overflow-y: scroll; */
   padding: 30px;
   font-size: 1.1vw;
   font-family: 'Source Sans Pro', sans-serif;
@@ -85,6 +86,27 @@ html, body {
   box-shadow: inset -5px 0 0px 0px rgba(20,20,20,0.1); */
   /* box-shadow: 10px 10px 5px gray; */
 }
+#control-panel-btn {
+  left: -40px;
+  top: 10px;
+  position: absolute;
+  height: 50px;
+  width: 55px;
+  /* background-color: #76ABAE; */
+  background-color: #31363F;
+  border-radius: 15%;
+}
+#control-panel-btn>i{
+    color: white;
+    top: -4px;
+    left: 0px;
+    height: 100%;
+    width: 100%;
+    text-align: center;
+    position: absolute;
+    font-size: 35px;
+}
+
 /* Add animation for sliding  */
 .slideright {
   transform: translateX(100%) !important;
@@ -381,9 +403,38 @@ background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/s
 div:has(>#ctrl-token-spinner){
   position: relative;
 }
-#ctrl-token-spinner{
+.ctrl-token-status{
   position: absolute;
   top: 5px;
   right: 5px;
+}
+
+#ctrl-token-success{
+  color: green;
+  font-size: 50px;
+  margin-top: -12px;
+}
+#ctrl-token-fail{
+  color: red;
+  font-size: 30px;
+  margin-top: -15px;
+  margin-right: -5px;
+}
+
+.ctrl-token-icon{
+  height: 40px;
+  text-align: center;
+  vertical-align: middle;
+  width: 40px;
+  animation: fadeinphoto 1s;
+  animation-iteration-count: infinite;
+}
+@keyframes fadeinphoto {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+#ctrl-token-spinner{
   color: #76ABAE;
 }

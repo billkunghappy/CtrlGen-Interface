@@ -147,8 +147,8 @@ function setupEditorHumanOnly() {
     }
   });
 
-  trackTextChanges();
-  trackSelectionChange();
+  // trackTextChanges();
+  // trackSelectionChange();
 
   quill.focus();
 }
@@ -160,6 +160,9 @@ function setupEditorMachineOnly() {
       handler: function() {
         logEvent(EventName.SUGGESTION_GET, EventSource.USER);
         queryGPT3();
+        if (apply_control()){
+          queryTokenRange();
+        }
       }
     },
     enter: {
@@ -200,8 +203,8 @@ function setupEditorMachineOnly() {
     }
   });
 
-  trackTextChangesByMachineOnly();
-  trackSelectionChange();
+  // trackTextChangesByMachineOnly();
+  // trackSelectionChange();
 
   quill.focus();
 }
@@ -213,6 +216,9 @@ function setupEditor() {
       handler: function() {
         logEvent(EventName.SUGGESTION_GET, EventSource.USER);
         queryGPT3();
+        if (apply_control()){
+          queryTokenRange();
+        }
       }
     },
     enter: {
@@ -253,8 +259,8 @@ function setupEditor() {
     }
   });
 
-  trackTextChanges();
-  trackSelectionChange();
+  // trackTextChanges();
+  // trackSelectionChange();
 
   quill.focus();
 }
@@ -310,40 +316,76 @@ function setText(text) {
 }
 
 function appendText(text) {
-  // We change this part, to directly appendText at the cursor
-  // Legacy
-  // let lastIndex = getText().length;
-
-  // // This action is automatically logged by text-change
-  // quill.insertText(lastIndex, text);
-
-  // // By default, selection change due to text insertion is "silent"
-  // // and not saved as part of logs
-  // setCursorAtTheEnd();
-  // New
-  console.log(text);
+  // If there's text to rewrite, we first remove it
+  remove_to_rewrite();
+  // Now we can insert the new text, and also store these machine generated text as to_rewrite
   let curIndex = getCursorIndex();
+  console.log("Insert text: #" + text + "# -- "+ String(curIndex));
   quill.insertText(curIndex, text);
+  update_to_rewrite(curIndex, text.length);
+  setCursor(curIndex + text.length);
+  // Show the token control panel
+  show_token_control();
+
+  // Start a one time text change caller. If text been changed by user (only user), remove all format and disable token control.
+  // Also after text changed, since we disable the to rewrite, we also need to 
+  // For token length control, we will call it with silent
+  quill.once('text-change', (delta, oldDelta, source) => {
+    if (source == "user") {
+      // Note: If the text is changed by calling append text
+      reset_to_rewrite();
+      remove_all_format();
+      disable_token_control();
+      console.log("Editor changed by user, remove format and disable token control...")
+    }
+  });
+}
+
+
+function remove_all_format(){
+  quill.formatText(0, 100000, {
+    'color': 'black'
+  });
+  console.log("remove format");
+}
+
+
+// We have a function to store the to_rewrite part
+var to_rewrite_curIndex = -1;
+var to_rewrite_length = -1;
+
+
+function reset_to_rewrite(){
+  to_rewrite_curIndex = -1;
+  to_rewrite_length = -1;
+}
+
+function update_to_rewrite(curIndex, length){
+  // Update the information of the to_rewrite span. In the furture, when remove_to_rewrite is called, we rewrite it
+  to_rewrite_curIndex = curIndex;
+  to_rewrite_length = length;
+  console.log("Set to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
+  // Update format
+  remove_all_format();
   // Add color to the inserted text
-  quill.formatText(curIndex, text.length, {                   // unbolds 'hello' and set its color to blue
+  quill.formatText(curIndex, length, {
     'bold' : false,
     'color': 'rgb(128,128,128)'
   });
-  setCursor(curIndex + text.length);
+  console.log("set format at " + String(curIndex) + " ~ " + String(curIndex + length));
+}
 
-  // Start a one time text change 
-  quill.once('text-change', (delta, oldDelta, source) => {
-    // For token length control, we will call it with silent
-    // We remove the color for all the later text
-    quill.formatText(curIndex, 100000, {                   // unbolds 'hello' and set its color to blue
-      'color': 'black'
-    });
-    // quill.removeFormat(curIndex + text.length, 10000)
-    console.log("Editor changed, remove format...")
-    // Also slide back the token control panel
-    $("#ctrl-token-collapse").addClass("slideright");
-  });
-
-  // Show the token control panel
-  $("#ctrl-token-collapse").removeClass("slideright");
+function remove_to_rewrite(){
+  // Will remove the rewritten part if they are set. And will remove all format. After that, reset the to_rewrite vars
+  if (to_rewrite_curIndex >= 0 && to_rewrite_length > 0){
+    console.log(getCursorIndex());
+    quill.deleteText(to_rewrite_curIndex, to_rewrite_length);
+    console.log(getCursorIndex());
+    setCursor(to_rewrite_curIndex);
+    console.log(getCursorIndex());
+    remove_all_format();
+    console.log(getCursorIndex());
+    console.log("Delete to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
+  }
+  reset_to_rewrite();
 }
