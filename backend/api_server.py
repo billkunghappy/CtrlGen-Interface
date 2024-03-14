@@ -409,7 +409,7 @@ def query():
                     suggestion = parse_suggestion(
                         choice_text,
                         results['after_prompt'],
-                        stop_rules
+                        []
                     )
                     probability = (np.e**log_prob) * 100
                     suggestions.append((suggestion, probability, engine))

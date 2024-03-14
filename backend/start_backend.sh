@@ -1,7 +1,7 @@
 python3 api_server.py \
 	--config_dir '../config' \
 	--log_dir ../logs \
-	--port 3456 \
+	--port 4567 \
 	--proj_name 'pilot' \
 	--use_local_model \
 	--local_model_server_ip 127.0.0.1 \

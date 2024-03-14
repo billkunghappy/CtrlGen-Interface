@@ -32,6 +32,7 @@ hmm_status = None
 def prompt():
     # Get the text and operation
     input_json = request.json
+    print(input_json)
     return prompt_(input_json)
 
 
@@ -227,7 +228,6 @@ def prompt_(input_json):
             })
 
         print(results)
-
 
     return results
 
