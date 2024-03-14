@@ -314,13 +314,20 @@ def query():
                         "AAA"
                     ]
                     beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.2, 0.1]
+                    beam_results_list = [beam_results]
                     sleep(2)
                 else:
-                    beam_results = {}
-                    beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
-                    beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
+                    beam_results_list = [
+                        {
+                            'beam_outputs_texts': ["X"*i],
+                            'beam_outputs_sequences_scores': [-i]
+                        } for i in range(1, 16+1)
+                    ]
+                        
+                    # beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
+                    # beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
                     sleep(5)
-                beam_results_list = [beam_results]
+                
             # ---------- End debug 
             else:
                 # https://stackoverflow.com/questions/9110593/asynchronous-requests-with-python-requests
