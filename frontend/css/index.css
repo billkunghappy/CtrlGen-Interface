@@ -76,8 +76,8 @@ html, body {
   opacity: 0.8;
   overflow: visible;
   /* overflow-y: scroll; */
-  padding: 30px;
-  font-size: 1.1vw;
+  padding: 1vw;
+  font-size: 1vw;
   font-family: 'Source Sans Pro', sans-serif;
   color: #222831;
   transition: 0.6s;
@@ -149,7 +149,7 @@ html, body {
 
 #editor-container {
   font-family: 'Source Sans Pro', sans-serif;
-  font-size: 18px;
+  font-size: 24px;
   height: auto;
 }
 
@@ -437,4 +437,48 @@ div:has(>#ctrl-token-spinner){
 
 #ctrl-token-spinner{
   color: #76ABAE;
+}
+
+/* .ql-toolbar {
+  font-size: 2rem;
+  line-height: 2rem;
+  font-weight: 500;
+}
+
+.ql-snow .ql-toolbar button{
+  height: 32px;
+  width: 32px;
+} */
+
+/* .title_icon{
+  display: inline-block;
+  width: 96px;
+  height: 96px;
+  background-image: url(icons/icons8-ctrl-96.png);
+  background-repeat: no-repeat;
+  background-size: cover;
+} */
+
+#header>h1{
+  font-size: 60px;
+  font-weight: 600;
+  font-family: monospace;
+  font-stretch: expanded;
+  /* width: 100px;
+  height: 100%; */
+  
+  /* border-radius: 8px;
+  display: inline;
+  text-align: center;
+  padding: 5px; */
+  /* background-color: #76ABAE;
+  color: #222831; */
+}
+#robot{
+  font-size: 40px;
+  margin-left: 20px;
+  height: 100%;
+  line-height: inherit;
+  vertical-align: top;
+  margin-top: 10px;
 }
