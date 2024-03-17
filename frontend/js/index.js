@@ -1,3 +1,15 @@
+var inAnimation = false;
+function delay_key(fn, ms) {
+  let timer = 0
+  if (!inAnimation){
+    ms = 0;
+  }
+  return function(...args) {
+    clearTimeout(timer)
+    timer = setTimeout(fn.bind(this, ...args), ms || 0)
+  }
+}
+
 $(function() {
   startBlinking();
 
@@ -58,12 +70,12 @@ $(function() {
     if ($(e.target).closest("#frontend-overlay").length > 0) {
       return false;
     } else {
-      hideDropdownMenu(EventSource.USER);
+      close_dropdown();
     }
   });
 
   // Navigate dropdown menu using arrow keys
-  tab = 9, enter = 13, esc = 27, left = 37, up = 38, right = 39, down = 40;
+  tab = 9, enter = 13, esc = 27, left = 37, up = 38, right = 39, down = 40, shift = 16;
   $(document).keydown(function(e) {
     if ($('#frontend-overlay').hasClass('hidden')) {
       // Reopen dropdown menu
@@ -72,50 +84,63 @@ $(function() {
         e.preventDefault();
       }
       return;
-    } else {
+    }
+  });
+  $(document).keyup(delay_key(function(e) {
+    if (e.shiftKey && e.key === 'Tab') {
+      console.log("Shift Tab keyup");
+      // showDropdownMenu(EventSource.USER, is_reopen=true);
+      // e.preventDefault();
+    }
+    else {
       switch (e.which) {
         case up:
-          previousItem = $('.dropdown-item').get(currentIndex);
-          $(previousItem).removeClass('sudo-hover');
-          currentIndex = currentIndex - 1;
-          if (currentIndex < 0) {
-            currentIndex = numItems - 1;
-          }
-          currentItem = $('.dropdown-item').get(currentIndex);
-          $(currentItem).addClass('sudo-hover');
+          // previousItem = $('.dropdown-item').get(currentIndex);
+          // $(previousItem).removeClass('sudo-hover');
+          // currentIndex = currentIndex - 1;
+          // if (currentIndex < 0) {
+          //   currentIndex = numItems - 1;
+          // }
+          // currentItem = $('.dropdown-item').get(currentIndex);
+          // $(currentItem).addClass('sudo-hover');
+          vertCycleDropdownUp();
 
           logEvent(EventName.SUGGESTION_UP, EventSource.USER);
           break;
 
         case down:
-          previousItem = $('.dropdown-item').get(currentIndex);
-          $(previousItem).removeClass('sudo-hover');
-          currentIndex = currentIndex + 1;
-          if (currentIndex == numItems) {
-            currentIndex = 0;
-          }
-          currentItem = $('.dropdown-item').get(currentIndex);
-          $(currentItem).addClass('sudo-hover');
+          // previousItem = $('.dropdown-item').get(currentIndex);
+          // $(previousItem).removeClass('sudo-hover');
+          // currentIndex = currentIndex + 1;
+          // if (currentIndex == numItems) {
+          //   currentIndex = 0;
+          // }
+          // currentItem = $('.dropdown-item').get(currentIndex);
+          // $(currentItem).addClass('sudo-hover');
+          vertCycleDropdownDown();
 
           logEvent(EventName.SUGGESTION_DOWN, EventSource.USER);
           break;
 
         case esc:
           logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
-          hideDropdownMenu(EventSource.USER);
+          close_dropdown();
           break;
 
         case tab:
           break;
-
+        case shift:
+          break;
         default:
-          hideDropdownMenu(EventSource.USER);
+          close_dropdown(click_item = true);
+          // close_dropdown();
           return;
       }
       e.preventDefault();
       return;
     }
-  });
+    
+  }, dropdown_anime_speed));
 
   /* Handle buttons */
   $('#shortcuts-close-btn').click(function(e) {

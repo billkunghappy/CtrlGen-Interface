@@ -123,3 +123,6 @@ if (condition == 'human') {
 var ctrl_token_range_min = 1;
 var ctrl_token_range_max = 32;
 var ctrl_token_range_step = 2;
+
+// Whether to apply token control
+var apply_token_control = false;

@@ -128,7 +128,8 @@ def filter_suggestions(
         blocklist: a set of strings
     """
     filtered_suggestions = []
-    duplicates = set([prev_sugg['original'] for prev_sugg in prev_suggestions])
+    # duplicates = set([prev_sugg['original'] for prev_sugg in prev_suggestions])
+    duplicates = set([prev_sugg[0] for prev_sugg in prev_suggestions])
 
     empty_cnt = 0
     duplicate_cnt = 0
