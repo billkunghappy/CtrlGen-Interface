@@ -279,8 +279,22 @@ def query():
                 n = len(content['token_range_list'])
                 # When querying various token length, we remove the word constraints
                 word_range = []
+                trunc_len_list = [1] * n
             else:
-                token_constraint = [[1, max_tokens]]
+                if (len(word_range) == 0) and (selected.strip() == ""):
+                    # Don't do this when word length control is specified or we're doing rewriting
+                    # No word constraints
+                    # Set custom here
+                    token_constraint = [
+                        [1, 16],
+                        [16, 32],
+                        [32, 48],
+                        [1, 64]
+                    ]
+                    trunc_len_list = [1,1,1,2]
+                else:
+                    token_constraint = [[1, max_tokens]]
+                    trunc_len_list = [n]
                 DO_TOKEN_RANGE = False
             request_json = {
                 # Input Text
@@ -315,7 +329,7 @@ def query():
                     ]
                     beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.2, 0.1]
                     beam_results_list = [beam_results]
-                    sleep(2)
+                    sleep(0)
                 else:
                     beam_results_list = [
                         {
@@ -416,7 +430,7 @@ def query():
                     suggestion = parse_suggestion(
                         choice_text,
                         results['after_prompt'],
-                        []
+                        stop_rules = []
                     )
                     probability = (np.e**log_prob) * 100
                     suggestions.append((suggestion, probability, engine))
@@ -434,7 +448,7 @@ def query():
         'duplicate_cnt': 0,
         'bad_cnt': 0
     }
-    for suggestions in suggestions_list:
+    for suggestions, trunc_len in zip(suggestions_list, trunc_len_list):
         # Always return original model outputs
         original_suggestions_ = []
         for index, (suggestion, probability, source) in enumerate(suggestions):
@@ -448,14 +462,11 @@ def query():
         # Filter out model outputs for safety
         filtered_suggestions_, counts_ = filter_suggestions(
             suggestions,
-            prev_suggestions,
+            # prev_suggestions,
+            filtered_suggestions,
             blocklist,
         )
         # Get the num_return_sequence of highest prob sequence here
-        if DO_TOKEN_RANGE:
-            trunc_len = 1
-        else:
-            trunc_len = n
         filtered_suggestions_ = filtered_suggestions_[:trunc_len]
         # Combine the results
         original_suggestions += original_suggestions_
@@ -464,7 +475,7 @@ def query():
         counts['duplicate_cnt'] += counts_['duplicate_cnt']
         counts['bad_cnt'] += counts_['bad_cnt']
 
-    print("Suggestions: ", json.dumps(filtered_suggestions, indent = 4))
+    # print("Suggestions: ", json.dumps(filtered_suggestions, indent = 4))
     # random.shuffle(filtered_suggestions)
 
     suggestions_with_probabilities = []
@@ -476,10 +487,25 @@ def query():
             'probability': probability,
             'source': source,
         })
-
+    # Sort agiain
+    original_suggestions_sorted = []
+    suggestions_with_probabilities_sorted = []
+    if not DO_TOKEN_RANGE:
+        rank_idx_list = np.array([ - choice['probability'] for choice in suggestions_with_probabilities]).argsort().tolist()
+        # We switch the first two, because the default choice in frontend is the 2nd, which should have the hightest prob
+        tmp = rank_idx_list[0]
+        rank_idx_list[0] = rank_idx_list[1]
+        rank_idx_list[1] = tmp
+        for i, rank_idx in enumerate(rank_idx_list):
+            original_suggestions_sorted.append(original_suggestions[rank_idx])
+            suggestions_with_probabilities_sorted.append(suggestions_with_probabilities[rank_idx])
+    else:
+        original_suggestions_sorted = original_suggestions
+        suggestions_with_probabilities_sorted = suggestions_with_probabilities
+    print("Suggestions: ", json.dumps(suggestions_with_probabilities_sorted, indent = 4))
     results['status'] = SUCCESS
-    results['original_suggestions'] = original_suggestions
-    results['suggestions_with_probabilities'] = suggestions_with_probabilities
+    results['original_suggestions'] = original_suggestions_sorted
+    results['suggestions_with_probabilities'] = suggestions_with_probabilities_sorted
     results['ctrl'] = {
         'n': n,
         'max_tokens': max_tokens,

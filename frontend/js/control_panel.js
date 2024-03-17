@@ -76,7 +76,9 @@ function update_token_output_list(suggestions){
 }
 
 function show_token_control(){
-    $("#ctrl-token-collapse").removeClass("slideright");
+    if (apply_token_control){
+        $("#ctrl-token-collapse").removeClass("slideright");
+    }
 }
 
 function disable_token_control(){

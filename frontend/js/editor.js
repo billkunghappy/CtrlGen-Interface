@@ -160,7 +160,7 @@ function setupEditorMachineOnly() {
       handler: function() {
         logEvent(EventName.SUGGESTION_GET, EventSource.USER);
         queryGPT3();
-        if (apply_control()){
+        if (apply_control() && apply_token_control){
           queryTokenRange();
         }
       }
@@ -216,7 +216,7 @@ function setupEditor() {
       handler: function() {
         logEvent(EventName.SUGGESTION_GET, EventSource.USER);
         queryGPT3();
-        if (apply_control()){
+        if (apply_control() && apply_token_control){
           queryTokenRange();
         }
       }
@@ -284,6 +284,7 @@ function getCursorIndex() {
 }
 
 function setCursor(index) {
+  console.log("set cursor");
   // Adjust if index is outside of range
   let doc = quill.getText(0);
   let lastIndex = doc.length - 1;
@@ -364,27 +365,24 @@ function update_to_rewrite(curIndex, length){
   // Update the information of the to_rewrite span. In the furture, when remove_to_rewrite is called, we rewrite it
   to_rewrite_curIndex = curIndex;
   to_rewrite_length = length;
-  console.log("Set to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
+  // console.log("Set to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
   // Update format
   remove_all_format();
   // Add color to the inserted text
   quill.formatText(curIndex, length, {
     'bold' : false,
-    'color': 'rgb(128,128,128)'
+    // 'color': 'rgb(128,128,128)'
+    'color': 'rgb(118, 171, 174)'
   });
-  console.log("set format at " + String(curIndex) + " ~ " + String(curIndex + length));
+  // console.log("set format at " + String(curIndex) + " ~ " + String(curIndex + length));
 }
 
 function remove_to_rewrite(){
   // Will remove the rewritten part if they are set. And will remove all format. After that, reset the to_rewrite vars
   if (to_rewrite_curIndex >= 0 && to_rewrite_length > 0){
-    console.log(getCursorIndex());
     quill.deleteText(to_rewrite_curIndex, to_rewrite_length);
-    console.log(getCursorIndex());
     setCursor(to_rewrite_curIndex);
-    console.log(getCursorIndex());
     remove_all_format();
-    console.log(getCursorIndex());
     console.log("Delete to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
   }
   reset_to_rewrite();
