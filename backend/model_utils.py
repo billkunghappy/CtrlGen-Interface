@@ -124,8 +124,11 @@ class ConstraintLogitsProcessor(LogitsProcessor):
         prefixes = [tuple(hmm_prefix) + tuple(prefix)
             for prefix in input_ids[:,hmm_prompt_len:].tolist()]
 
-        selected_idx = [i for i, prefix in enumerate(prefixes)
-            if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
+        if len(prefixes[0]) > 0:
+            selected_idx = [i for i, prefix in enumerate(prefixes)
+                if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
+        else:
+            selected_idx = [i for i, _ in enumerate(prefixes)]
         selected_prefixes = [prefixes[i] for i in selected_idx]
         selected_token_ranges = [hmm_token_ranges[i] for i in selected_idx]
 

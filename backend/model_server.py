@@ -97,7 +97,7 @@ def prompt_(input_json):
         global hmm_status
 
         if tuple(prompt_tokens) not in kv_cache:            
-            past_key_values = llama_model(torch.tensor([prompt_tokens], device=device)).past_key_values
+            past_key_values = llama_model(torch.tensor([prompt_tokens[:-1]], device=device)).past_key_values
             kv_cache = {tuple(prompt_tokens): past_key_values}
         else:
             print('cache hit!', num_beams*num_token_ranges)
@@ -184,7 +184,7 @@ def prompt_(input_json):
             output_ids.append(seq)
             sequence_ids.append(list(prompt_tokens) + list(seq) + list(suffix_tokens))
 
-            check_suffix_len = min(1, len(suffix_tokens))
+            check_suffix_len = min(5, len(suffix_tokens))
 
             mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(seq) + [0.0] * len(suffix_tokens))
             mask2.append([0.0] * (len(prompt_tokens)+len(seq)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
