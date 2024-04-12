@@ -167,8 +167,11 @@ class ConstraintLogitsProcessor(LogitsProcessor):
         prefixes = [tuple(hmm_prefix) + tuple(prefix)
             for prefix in input_ids[:,hmm_prompt_len:].tolist()]
 
-        selected_idx = [i for i, prefix in enumerate(prefixes)
-            if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
+        if len(prefixes[0]) > 0:
+            selected_idx = [i for i, prefix in enumerate(prefixes)
+                if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
+        else:
+            selected_idx = [i for i, _ in enumerate(prefixes)]
         selected_prefixes = [prefixes[i] for i in selected_idx]
         selected_token_ranges = [hmm_token_ranges[i] for i in selected_idx]
 
@@ -179,8 +182,7 @@ class ConstraintLogitsProcessor(LogitsProcessor):
             batch_size=hmm_batch_size)
 
         hmm_logits -= hmm_logits_
-        hmm_logits = torch.cat((hmm_logits, -1e10 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
-
+        hmm_logits = torch.cat((hmm_logits, -1e30 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
         logits = torch.log_softmax(scores, dim=-1)
         logits[selected_idx, :] += hmm_logits
         logits = torch.log_softmax(logits, dim=-1)

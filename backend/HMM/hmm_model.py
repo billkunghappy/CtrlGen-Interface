@@ -65,13 +65,21 @@ def ends_at(prefix, suffix,
 
 
 class HMM(nn.Module):
-    def __init__(self, weights_file):
+    def __init__(self, weights_file,
+        enforce_eos_constraint=False, eos_token_id=2):
         super().__init__()
 
         assert(weights_file[-2:] == 'th')
 
         d = torch.load(weights_file)
         alpha, beta, gamma = d['alpha'], d['beta'], d['gamma']
+
+        if enforce_eos_constraint:
+            alpha[-1, :] = -1e30
+            alpha[-1, -1] = 0.0
+            beta[:-1, eos_token_id] = -1e30
+            beta[-1, :] = -1e30
+            beta[-1, eos_token_id] = 0.0
 
         alpha_exp = torch.softmax(alpha, dim=1)
         beta = torch.log_softmax(beta, dim=1)
@@ -219,7 +227,7 @@ class HMM(nn.Module):
 
         device = self.alpha_exp.device
         eos_token_id = 2
-        neginf_cuda = -1e10 * torch.ones(1, device=device)
+        neginf_cuda = -1e30 * torch.ones(1, device=device)
 
         prefix_num, prefix_len = len(prefixes), len(prefixes[0])
 
@@ -236,7 +244,7 @@ class HMM(nn.Module):
         else:
             A = torch.stack([A_cache[prefix] for prefix in prefixes], dim=0) # prefix_num * hidden_states
 
-        logits = torch.full((prefix_num, vocab_size), -1e10, device=device)
+        logits = torch.full((prefix_num, vocab_size), -1e30, device=device)
 
         # gather the list of indices that has at least one more token left before suffix
         generated_tokens = prefix_len - generation_offset
@@ -299,7 +307,8 @@ class HMM(nn.Module):
         if suffix[-1] != eos_token_id and generated_tokens > 0:
             for prefix_idx, prefix in enumerate(prefixes):
                 if prefix[-len(suffix):] == suffix:
-                    logits[prefix_idx, eos_token_id] = -neginf_cuda
+                    logits[prefix_idx, :] = neginf_cuda
+                    logits[prefix_idx, eos_token_id] = 0.0
                     logits_[prefix_idx, eos_token_id] = 0.0
 
         return logits, logits_

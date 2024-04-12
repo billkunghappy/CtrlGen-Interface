@@ -32,6 +32,7 @@ hmm_status = None
 def prompt():
     # Get the text and operation
     input_json = request.json
+    print(input_json)
     return prompt_(input_json)
 
 
@@ -46,7 +47,7 @@ def prompt_(input_json):
         llama_insertion=args.llama_insertion # If set to true, use "Insertion" for the insertion prompt
     )
     # Get the constraints
-    token_constraint, word_constraint, keyword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"]
+    token_constraint, word_constraint, keyword_constraint, banword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"], input_json["banword_constraint"]
     max_tokens = max([token_range[1] for token_range in token_constraint])
     num_token_ranges = len(token_constraint)
 
@@ -65,6 +66,9 @@ def prompt_(input_json):
 
     # Construct DFA graph
     dfa_graphs = []
+    if len(banword_constraint) != 0:
+        print('Build Banword')
+        dfa_graphs.append(banphrase_builder.build(banword_constraint))
     if len(keyword_constraint) != 0:
         print("Build Keyword")
         dfa_graphs.append(keyphrase_builder.build(keyword_constraint))
@@ -72,6 +76,7 @@ def prompt_(input_json):
         print("Build Word Length")
         dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
     if Suffix == '':
+        print("Build End of Sentence")
         dfa_graphs.append(end_sentence_builder.build())
 
     if dfa_graphs != []:
@@ -96,7 +101,7 @@ def prompt_(input_json):
         global hmm_status
 
         if tuple(prompt_tokens) not in kv_cache:            
-            past_key_values = llama_model(torch.tensor([prompt_tokens], device=device)).past_key_values
+            past_key_values = llama_model(torch.tensor([prompt_tokens[:-1]], device=device)).past_key_values
             kv_cache = {tuple(prompt_tokens): past_key_values}
         else:
             print('cache hit!', num_beams*num_token_ranges)
@@ -183,7 +188,7 @@ def prompt_(input_json):
             output_ids.append(seq)
             sequence_ids.append(list(prompt_tokens) + list(seq) + list(suffix_tokens))
 
-            check_suffix_len = min(1, len(suffix_tokens))
+            check_suffix_len = min(5, len(suffix_tokens))
 
             mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(seq) + [0.0] * len(suffix_tokens))
             mask2.append([0.0] * (len(prompt_tokens)+len(seq)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
@@ -228,7 +233,6 @@ def prompt_(input_json):
 
         print(results)
 
-
     return results
 
 
@@ -258,6 +262,7 @@ def load_models():
     global llama_model
     global hmm_model
     global keyphrase_builder
+    global banphrase_builder
     global end_sentence_builder
     global word_count_builder
     global trivial_builder
@@ -274,6 +279,7 @@ def load_models():
 
         print(f'constructing DFA builders ...')
         keyphrase_builder = KeyphraseBuilder(tokenizer, 32000)
+        banphrase_builder = BanphraseBuilder(tokenizer, 32000)
         end_sentence_builder = EndSentenceBuilder(tokenizer, 32000)
         word_count_builder = WordCountBuilder(tokenizer, 32000)
         trivial_builder = TrivialBuilder(tokenizer, 32000)
