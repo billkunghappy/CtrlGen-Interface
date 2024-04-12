@@ -47,7 +47,7 @@ def prompt_(input_json):
         llama_insertion=args.llama_insertion # If set to true, use "Insertion" for the insertion prompt
     )
     # Get the constraints
-    token_constraint, word_constraint, keyword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"]
+    token_constraint, word_constraint, keyword_constraint, banword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"], input_json["banword_constraint"]
     max_tokens = max([token_range[1] for token_range in token_constraint])
     num_token_ranges = len(token_constraint)
 
