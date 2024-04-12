@@ -3,9 +3,9 @@ async function startSession(accessCode) {
   logs = [];
   try {
     session = await wwai.api.startSession(domain, accessCode);
-    if (debug) {
-      console.log(session);
-    }
+    // if (debug) {
+    console.log(session);
+    // }
     if (session['status'] == FAILURE){
       alert(session['message']);
     } else {
@@ -33,11 +33,14 @@ async function startSession(accessCode) {
       );
 
       stop = session.stop;
-      engine = session.engine;
+      if (engine == null){
+        engine = session.engine;
+      }
     }
   } catch(e) {
     alert('Start sesion error:' + e);
     console.log(e);
+    console.log(session);
     session = await wwai.api.startSession(domain, accessCode);
     console.log(session)
   } finally {
@@ -320,6 +323,7 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length, token_ra
     // frequency_penalty = $("#ctrl-frequency_penalty").val();
     // model = $("#ctrl-model").val();
     keyword = $("#ctrl-keyword").val();
+    banword = $("#ctrl-banword").val();
     length_unit = $("#ctrl-length_unit").val();
     length = [$('#ctrl-length-slider > input:eq(0)').val(), $('#ctrl-length-slider > input:eq(1)').val()];
     instruct = $("#ctrl-instruct").val();
@@ -327,6 +331,7 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length, token_ra
   }
   else {
     keyword = "";
+    banword = "";
     length_unit = "none";
     length = [];
     instruct = "";
@@ -352,6 +357,7 @@ function getDataForQuery(doc, exampleText, cursor_index, cursor_length, token_ra
     // Model and Our Control Signal
     'model': $("#ctrl-model").val(),
     'keyword': keyword,
+    'banword': banword,
     'length_unit': length_unit,
     'length': length,
     'instruct': instruct,

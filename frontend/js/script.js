@@ -4,12 +4,14 @@ window.wwai = window.wwai || {};
   wwai.api = {};
 
   function getUrl(api_method) {
+    console.log("url: " + serverURL + '/api/' + api_method)
     return serverURL + '/api/' + api_method;
   }
 
   async function serverFetch(api_method, arg_dict) {
     return fetch(getUrl(api_method), {
       method: "POST",
+      mode: 'cors',
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json"

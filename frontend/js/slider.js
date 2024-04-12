@@ -16,7 +16,7 @@ function InitSlider(){
     // Initialize The Sliders
     ctrl_len_slider = rangeSlider(document.querySelector('#ctrl-length-slider'), {
         "min": 1,
-        "max": 64,
+        "max": 32,
         "step" : 1,
         "value" : [10, 20], // Default value
         "onInput": (value, userInteraction) => {

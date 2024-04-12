@@ -3,7 +3,9 @@ var checkFormatLockTime = new Date();  // for template
 /* Setup */
 function trackTextChanges(){
   quill.on('text-change', function(delta, oldDelta, source) {
-    if (source == 'silent') {
+    console.log("Text Change");
+    if (source != 'user') {
+      // We only track user interaction here
       return;
     }
     else {
@@ -147,8 +149,8 @@ function setupEditorHumanOnly() {
     }
   });
 
-  // trackTextChanges();
-  // trackSelectionChange();
+  trackTextChanges();
+  trackSelectionChange();
 
   quill.focus();
 }
@@ -203,8 +205,8 @@ function setupEditorMachineOnly() {
     }
   });
 
-  // trackTextChangesByMachineOnly();
-  // trackSelectionChange();
+  trackTextChangesByMachineOnly();
+  trackSelectionChange();
 
   quill.focus();
 }
@@ -259,8 +261,8 @@ function setupEditor() {
     }
   });
 
-  // trackTextChanges();
-  // trackSelectionChange();
+  trackTextChanges();
+  trackSelectionChange();
 
   quill.focus();
 }
@@ -322,7 +324,7 @@ function appendText(text) {
   // Now we can insert the new text, and also store these machine generated text as to_rewrite
   let curIndex = getCursorIndex();
   console.log("Insert text: #" + text + "# -- "+ String(curIndex));
-  quill.insertText(curIndex, text);
+  quill.insertText(curIndex, text, source = "api");
   update_to_rewrite(curIndex, text.length);
   setCursor(curIndex + text.length);
   // Show the token control panel
