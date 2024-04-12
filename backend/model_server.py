@@ -66,6 +66,9 @@ def prompt_(input_json):
 
     # Construct DFA graph
     dfa_graphs = []
+    if len(banword_constraint) != 0:
+        print('Build Banword')
+        dfa_graphs.append(banphrase_builder.build(banword_constraint))
     if len(keyword_constraint) != 0:
         print("Build Keyword")
         dfa_graphs.append(keyphrase_builder.build(keyword_constraint))
@@ -73,6 +76,7 @@ def prompt_(input_json):
         print("Build Word Length")
         dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
     if Suffix == '':
+        print("Build End of Sentence")
         dfa_graphs.append(end_sentence_builder.build())
 
     if dfa_graphs != []:
@@ -258,6 +262,7 @@ def load_models():
     global llama_model
     global hmm_model
     global keyphrase_builder
+    global banphrase_builder
     global end_sentence_builder
     global word_count_builder
     global trivial_builder
@@ -274,6 +279,7 @@ def load_models():
 
         print(f'constructing DFA builders ...')
         keyphrase_builder = KeyphraseBuilder(tokenizer, 32000)
+        banphrase_builder = BanphraseBuilder(tokenizer, 32000)
         end_sentence_builder = EndSentenceBuilder(tokenizer, 32000)
         word_count_builder = WordCountBuilder(tokenizer, 32000)
         trivial_builder = TrivialBuilder(tokenizer, 32000)

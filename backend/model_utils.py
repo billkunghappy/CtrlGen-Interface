@@ -139,8 +139,7 @@ class ConstraintLogitsProcessor(LogitsProcessor):
             batch_size=hmm_batch_size)
 
         hmm_logits -= hmm_logits_
-        hmm_logits = torch.cat((hmm_logits, -1e10 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
-
+        hmm_logits = torch.cat((hmm_logits, -1e30 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
         logits = torch.log_softmax(scores, dim=-1)
         logits[selected_idx, :] += hmm_logits
         logits = torch.log_softmax(logits, dim=-1)

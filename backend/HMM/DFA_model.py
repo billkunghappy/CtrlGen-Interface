@@ -258,6 +258,22 @@ class KeyphraseBuilder:
         return dfa_graph
 
 
+class BanphraseBuilder:
+    def __init__(self, tokenizer, vocab_size):
+        self.tokenizer = tokenizer
+        self.pattern_builder = PatternBuilder(vocab_size)
+
+
+    def build(self, banphrases):
+        tokenizer = self.tokenizer
+        patterns = [tuple(tokenizer.encode(x)[1:]) for x in banphrases]
+
+        dfa_graphs = [self.pattern_builder.build(pattern) for pattern in patterns]
+        dfa_graph = DFA_negate(DFA_prod(dfa_graphs, mode='union'))
+
+        return dfa_graph
+
+
 # Generated text must be end with . " ? or !
 # class EndSentenceBuilder:
 #     def __init__(self, tokenizer, vocab_size,
@@ -297,12 +313,15 @@ class KeyphraseBuilder:
 #     def build(self):
 #         return self.dfa_graph
 
+
 class EndSentenceBuilder:
     def __init__(self, tokenizer, vocab_size,
-            periods=['.','\"', '?', '!'], eos_token_id=2):
+            periods=['.'], eos_token_id=2):
 
         vocab_set = set([x for x in range(0, vocab_size)])
-        token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
+        # token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
+        token_ids = [29889]
+        
         others_set = vocab_set.difference(set(token_ids))
 
         edges = [
@@ -368,7 +387,7 @@ class EOSBuilder:
 
 
 class WordCountBuilder:
-    def __init__(self, tokenizer, vocab_size, sep=[' ', '\n', ',', '.', ':', ';', '\"', '\'', '/']):
+    def __init__(self, tokenizer, vocab_size, sep=[' ', '\n', ',', '.', ':', ';', '\"', '/']):
         vocab00_list, vocab01_list, vocab10_list, vocab11_list = [], [], [], []
         for token_id in range(3, vocab_size):
             token = tokenizer.decode([13, token_id])[1:]
@@ -422,7 +441,7 @@ class WordCountBuilder:
             u, v = e
             edges.append((u, v, transition))
 
-        initial_state = (0, 0)
+        initial_state = (0, 1)
         accept_states = [(k, s) for k in range(min_word_count, max_word_count+1) for s in range(0, 2)]
 
         return {
