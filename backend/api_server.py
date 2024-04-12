@@ -281,7 +281,7 @@ def query():
                 word_range = []
                 trunc_len_list = [1] * n
             else:
-                if (len(word_range) == 0) and (selected.strip() == ""):
+                if (len(word_range) == 0): #and (selected.strip() == ""):
                     # Don't do this when word length control is specified or we're doing rewriting
                     # No word constraints
                     # Set custom here
@@ -397,8 +397,9 @@ def query():
                 def sort_results(text_list, score_A_list, score_B_list):
                     ranked_text = []
                     ranked_score = []
-                    # We implement a simpler verison, that simply first multply the scores. Since it's logprob, we add it
-                    score_list = [a+b for a,b in zip(score_A_list, score_B_list)]
+                    # We implement a simpler verison, that simply first multply the scores. Since it's logprob, we add it                    
+                    score_B_threshold = sorted(score_B_list, reverse=True)[len(score_B_list) // 2]
+                    score_list = [a+b if b > score_B_threshold else a-1e10 for a,b in zip(score_A_list, score_B_list)]
                     # Get the rank
                     score_rank = (-np.array(score_list)).argsort()
                     for idx in score_rank:
@@ -432,7 +433,8 @@ def query():
                         results['after_prompt'],
                         stop_rules = []
                     )
-                    probability = (np.e**log_prob) * 100
+                    # probability = (np.e**log_prob) * 100
+                    probability = log_prob
                     suggestions.append((suggestion, probability, engine))
                 suggestions_list.append(suggestions)
         except Exception as e:
