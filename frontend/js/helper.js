@@ -19,6 +19,12 @@ function getControl(){
   return ctrl;
 }
 
+function setEngine(){
+  let urlString = window.location.href;
+  let url = new URL(urlString);
+  engine = url.searchParams.get("engine");
+}
+
 function getExpertise(){
   let urlString = window.location.href;
   let url = new URL(urlString);

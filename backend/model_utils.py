@@ -1,6 +1,9 @@
 from HMM.hmm_model import *
 from transformers import LogitsProcessor
 import torch
+import json
+from typing import TypeAlias
+from string import Template
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
     # if llama_insertion is true, use Insertion for the insertion prompt
@@ -20,6 +23,46 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
     else: # -prior, -prefix, -suffix
         operation = "Write"
     return operation
+
+Vector: TypeAlias = list[float]
+def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int]):
+    # Including 3 basic prompts: [Continuation, Insertion, Rewrite]
+    # Also includes 6 types of constraints: [Freeform, Keyword, Wordlength, Tokenlength(Deprecated), Keyword+Wordlength, Keyword+Tokenlength(Deprecated)]
+    # We do not do token constaints in our interface, so the types of constraints will be [Freeform, Keyword, Wordlength, Keyword+Wordlength]
+    prompt_templates = json.load(open("Prompt_Templates.json", "r"))
+    # First decide the basic operations.
+    have_prior = prior.strip() != ""
+    have_suffix = suffix.strip() != ""
+    if have_prior: # +prior, +-prefix, +-suffix
+        operation = "Rewrite"
+    elif have_suffix:  # -prior, +-prefix, +suffix
+        operation = "Insertion"
+    else: # -prior, +prefix, -suffix
+        operation = "Continuation"
+    # Check the constraints
+    constraints = []
+    if keyword_constraint != []:
+        constraints += ["Keyword"]
+    if len(word_range) > 0:
+        constraints += ["Wordlength"]
+    else:
+        word_range = ["", ""] # For later formatting
+    constraints_str = "+".join(constraints)
+    if constraints_str == "": # no constraints:
+        constraints_str = "Freeform"
+    print(f"Operation: {operation}, constraints_str: {constraints_str}")
+    GPT_prompt_template = Template(prompt_templates[operation][constraints_str])
+    # Format the prompt
+    GPT_prompt = GPT_prompt_template.safe_substitute(
+        keyword = ", ".join(keyword_constraint),
+        word_range_0 = word_range[0],
+        word_range_1 = word_range[1],
+        prefix = prefix,
+        prior = prior,
+        suffix = suffix
+    )
+    return GPT_prompt
+    
 
 
 def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, operation):

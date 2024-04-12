@@ -31,6 +31,9 @@ from parsing import (
     parse_prompt, parse_suggestion, parse_probability,
     filter_suggestions
 )
+from model_utils import (
+    get_gpt_prompt
+)
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
@@ -50,6 +53,7 @@ FAILURE = False
 @app.route('/api/start_session', methods=['POST'])
 @cross_origin(origin='*')
 def start_session():
+    print("start_session")
     content = request.json
     result = {}
 
@@ -208,38 +212,49 @@ def query():
     suffix = doc[content['cursor_index'] + content['cursor_length']:]
     results = parse_prompt(example_text + prefix, max_tokens, context_window_size)
     prompt = results['effective_prompt']
-    if not args.use_local_model:
+    # Get Constraints
+    # Word Constraints
+    # TODO: Need to implement sentence/passage constraints
+    word_control_type = content['length_unit']
+    if word_control_type == "none":
+        word_range = []
+    else:
+        word_range = (
+            min(int(content['length'][0]), int(content['length'][1])),
+            max(int(content['length'][0]), int(content['length'][1]))
+        )
+    # Keyword & Banword Constraints
+    keyword_constraint = [k.strip() for k in content['keyword'].split(";") if k.strip() != ""]
+    banword_constraint = [k.strip() for k in content['banword'].split(";") if k.strip() != ""]
+    
+    if engine != "local":
+        # Overwrite the prompt. The old version will use the effective prompt. Here we add more descriptions in the prompt for model to do continuation
+        prompt = get_gpt_prompt(
+            prefix,
+            selected,
+            suffix,
+            keyword_constraint = keyword_constraint,
+            word_range = word_range
+        )
         print("Querying OpenAI...")
         # Query GPT-3
         try:
-            if suffix != "": # If the demarcation is there, then suggest an insertion
-                # If you want to use chat model, change here to `openai.chat.Completion.create`
-                response = openai.Completion.create(
-                    engine=engine,
-                    prompt=prompt,
-                    suffix=suffix,
-                    n=n,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    presence_penalty=presence_penalty,
-                    frequency_penalty=frequency_penalty,
-                    logprobs=10,
-                    stop=stop_sequence,
-                )
-            else:
-                response = openai.Completion.create(
-                    engine=engine,
-                    prompt=prompt,
-                    n=n,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    presence_penalty=presence_penalty,
-                    frequency_penalty=frequency_penalty,
-                    logprobs=10,
-                    stop=stop_sequence,
-                )
+            # If you want to use chat model, change here to `openai.chat.Completion.create`
+            print("--------- GPT Prompt ----------")
+            print(prompt)
+            response = openai.Completion.create(
+                engine=engine,
+                prompt=prompt,
+                # suffix=suffix,
+                n=n,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+                logprobs=10,
+                stop=stop_sequence,
+            )
             suggestions = []
             for choice in response['choices']:
                 print(f"#{choice.text}#")
@@ -251,6 +266,8 @@ def query():
                 probability = parse_probability(choice.logprobs)
                 suggestions.append((suggestion, probability, engine))
             suggestions_list = [suggestions]
+            trunc_len_list = [n]
+            DO_TOKEN_RANGE = False
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
@@ -260,15 +277,6 @@ def query():
         print("Querying local model...")
         # Query Local Model using model and tokenizer
         try:
-            # TODO: Need to implement sentence/passage constraints
-            word_control_type = content['length_unit']
-            if word_control_type == "none":
-                word_range = []
-            else:
-                word_range = (
-                    min(int(content['length'][0]), int(content['length'][1])),
-                    max(int(content['length'][0]), int(content['length'][1]))
-                )
             if len(content['token_range_list']) > 0 and len(content['token_range_list'][0]) == 2:
                 # Have token range list. By default it is empty list []
                 # If have token range list, we are doing token length control with multiple settings
@@ -304,7 +312,8 @@ def query():
                 # Constraints
                 "Instruct": content['instruct'],
                 'word_constraint': word_range,
-                'keyword_constraint': [k.strip() for k in content['keyword'].split(";") if k.strip() != ""], # TODO: Add this
+                'keyword_constraint': keyword_constraint,
+                'banword_constraint': banword_constraint,
                 # General Config.
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
@@ -329,6 +338,7 @@ def query():
                     ]
                     beam_results['beam_outputs_sequences_scores'] = [0.5, 0.4, 0.3, 0.2, 0.2, 0.1]
                     beam_results_list = [beam_results]
+                    trunc_len_list = [n]
                     sleep(0)
                 else:
                     beam_results_list = [
@@ -337,7 +347,7 @@ def query():
                             'beam_outputs_sequences_scores': [-i]
                         } for i in range(1, 16+1)
                     ]
-                        
+                    
                     # beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
                     # beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
                     sleep(5)

@@ -94,6 +94,8 @@ function logEvent(eventName, eventSource, textDelta='', cursorRange=''){
 }
 
 function showLog(replayLog) {
+  // The function to display logs.
+  // Check index.js keybind, to combine each log event to a command
   if (debug) {
     console.log(replayLog.eventName);
   }
@@ -152,29 +154,29 @@ function showLog(replayLog) {
         showDropdownMenu(replayLog.eventSource, is_reopen=true);
         break;
       case EventName.SUGGESTION_UP:
-        $('.dropdown-item').removeClass('sudo-hover');
-
-        currentSuggestionIndex = replayLog.currentSuggestionIndex;
-        currentSuggestion = $('.dropdown-item')[currentSuggestionIndex];
-        $(currentSuggestion).addClass('sudo-hover');
+        // $('.dropdown-item').removeClass('sudo-hover');
+        // currentSuggestionIndex = replayLog.currentSuggestionIndex;
+        // currentSuggestion = $('.dropdown-item')[currentSuggestionIndex];
+        // $(currentSuggestion).addClass('sudo-hover');
+        vertCycleDropdownUp();
         break;
       case EventName.SUGGESTION_DOWN:
-        $('.dropdown-item').removeClass('sudo-hover');
-
-        currentSuggestionIndex = replayLog.currentSuggestionIndex;
-        currentSuggestion = $('.dropdown-item')[currentSuggestionIndex];
-        $(currentSuggestion).addClass('sudo-hover');
+        // $('.dropdown-item').removeClass('sudo-hover');
+        // currentSuggestionIndex = replayLog.currentSuggestionIndex;
+        // currentSuggestion = $('.dropdown-item')[currentSuggestionIndex];
+        // $(currentSuggestion).addClass('sudo-hover');
+        vertCycleDropdownDown();
         break;
       case EventName.SUGGESTION_HOVER:
-        $('.dropdown-item').removeClass('sudo-hover');
+        // $('.dropdown-item').removeClass('sudo-hover');
 
-        currentHoverIndex = replayLog.currentHoverIndex;
-        currentSuggestion = $('.dropdown-item')[currentHoverIndex];
-        $(currentSuggestion).addClass('sudo-hover');
+        // currentHoverIndex = replayLog.currentHoverIndex;
+        // currentSuggestion = $('.dropdown-item')[currentHoverIndex];
+        // $(currentSuggestion).addClass('sudo-hover');
         break;
       case EventName.SUGGESTION_SELECT:
-        currentSuggestion = $('.dropdown-item.sudo-hover')
-        $(currentSuggestion).removeClass('sudo-hover').addClass('sudo-click');
+        // currentSuggestion = $('.dropdown-item.sudo-hover')
+        // $(currentSuggestion).removeClass('sudo-hover').addClass('sudo-click');
         break;
       case EventName.SUGGESTION_CLOSE:
         hideDropdownMenu(replayLog.eventSource);

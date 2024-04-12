@@ -1,11 +1,13 @@
 function resetHMMCtrl(
     keyword = "",
+    banword = "",
     length_unit = "none",
     length = [10, 25],
     instruct = ""
   ){
     console.log("Reset Control");
     $("#ctrl-keyword").val(keyword);
+    $("#ctrl-banword").val(banword);
     $("#ctrl-length_unit").val(length_unit);
     // Set length range at slider
     reset_slider(length, min = null, max = null, disable = true);
@@ -13,6 +15,7 @@ function resetHMMCtrl(
 
     // Reverse animate
     $('#ctrl-keyword').parents(".card-body").removeClass('control');
+    $('#ctrl-banword').parents(".card-body").removeClass('control');
     $('#ctrl-length_unit').parents(".card-body").removeClass('control');
     $('#ctrl-instruct').parents(".card-body").removeClass('control');
 }
@@ -46,6 +49,14 @@ $('#ctrl-keyword').on('input', function() {
     }
     else{
         $('#ctrl-keyword').parents(".card-body").removeClass('control');
+    }
+});
+$('#ctrl-banword').on('input', function() {
+    if ($('#ctrl-banword').val().trim() != ""){
+        $('#ctrl-banword').parents(".card-body").addClass('control');
+    }
+    else{
+        $('#ctrl-banword').parents(".card-body").removeClass('control');
     }
 });
 $('#ctrl-instruct').on('input', function() {

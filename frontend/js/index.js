@@ -23,6 +23,8 @@ $(function() {
 
   /* Enable controls */
   ctrl = getControl(); // &ctrl=show
+  // Set the engine from url param, if not specified, use the default one
+  setEngine();
   if (ctrl.includes("show")){
     // Show control switch
     $('#control-panel-btn').css('display', 'block')
@@ -70,6 +72,7 @@ $(function() {
     if ($(e.target).closest("#frontend-overlay").length > 0) {
       return false;
     } else {
+      logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
       close_dropdown();
     }
   });
@@ -132,6 +135,7 @@ $(function() {
         case shift:
           break;
         default:
+          logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
           close_dropdown(click_item = true);
           // close_dropdown();
           return;
