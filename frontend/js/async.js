@@ -163,8 +163,12 @@ async function replay(replayLogs, start){
     }
     $timeElapsed.html(minutes + ':' + seconds);
 
-    if (ReplayableEvents.includes(prevEventName)) {
-      await delay(replayTime);
+    
+    if (DelayReplayEvents.includes(prevEventName)) {
+      await delay(600);
+    }
+    else if (ReplayableEvents.includes(prevEventName)) {
+      await delay(replayTime * 2);
     }
 
     showLog(replayLogs[i]);

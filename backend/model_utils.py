@@ -25,7 +25,7 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
     return operation
 
 Vector: TypeAlias = list[float]
-def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int]):
+def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int], token_range: list[int], instruction: str):
     # Including 3 basic prompts: [Continuation, Insertion, Rewrite]
     # Also includes 6 types of constraints: [Freeform, Keyword, Wordlength, Tokenlength(Deprecated), Keyword+Wordlength, Keyword+Tokenlength(Deprecated)]
     # We do not do token constaints in our interface, so the types of constraints will be [Freeform, Keyword, Wordlength, Keyword+Wordlength]
@@ -47,6 +47,13 @@ def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_ra
         constraints += ["Wordlength"]
     else:
         word_range = ["", ""] # For later formatting
+        # If not word constraints, see if use token constraints
+        if len(token_range) > 0:
+            constraints += ["Tokenlength"]
+    if not ("Tokenlength" in constraints):
+        # Reset token range
+        token_range = ["", ""]
+            
     constraints_str = "+".join(constraints)
     if constraints_str == "": # no constraints:
         constraints_str = "Freeform"
@@ -57,9 +64,12 @@ def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_ra
         keyword = ", ".join(keyword_constraint),
         word_range_0 = word_range[0],
         word_range_1 = word_range[1],
+        token_range_0 = token_range[0],
+        token_range_1 = token_range[1],
         prefix = prefix,
         prior = prior,
-        suffix = suffix
+        suffix = suffix,
+        instruction = instruction
     )
     return GPT_prompt
     
@@ -93,13 +103,14 @@ def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, o
 
 
 def hash_hmm_status(prefix_tokens, suffix_tokens,
-    token_constraint, word_constraint, keyword_constraint, Suffix):
+    token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix):
 
     return (tuple(prefix_tokens),
         tuple(suffix_tokens),
         tuple(sorted([tuple(x) for x in token_constraint])),
         tuple(word_constraint),
         tuple(sorted(keyword_constraint)),
+        tuple(sorted(banword_constraint)),
         Suffix == '')
 
 

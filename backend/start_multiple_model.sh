@@ -3,7 +3,7 @@
 HMM_MODEL_PATH="/local1/hzhang19/matcha/models/hmm_llama-story-pretrain-finetune_32768_64/checkpoint-50.weight.th"
 LLAMA_MODEL_PATH="/local1/ponienkung/CtrlGen/output/NewFinetunePretrained_Filtered_StoryPretrain-TULU-LLAMA2"
 
-GPUS=( 2 3 )
+GPUS=( 6 7 )
 PORT_START=8400
 
 PORT_LIST=()
@@ -24,10 +24,10 @@ printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
         CUDA_VISIBLE_DEVICES=${GPUS[i]} python3 model_server.py \
             --port ${PORT_LIST[i]} \
             --device cuda \
-            --hmm_batch_size 16 \
             --hmm_model_path $HMM_MODEL_PATH \
             --llama_model_path $LLAMA_MODEL_PATH \
             &
     done
     wait
 )
+# --llama_insertion \

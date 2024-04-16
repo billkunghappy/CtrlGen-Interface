@@ -112,7 +112,7 @@ def prompt_(input_json):
             for col in row]) for row in past_key_values])
 
         current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
-            token_constraint, word_constraint, keyword_constraint, Suffix)
+            token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
 
         if current_hmm_status != hmm_status:            
             hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
@@ -133,7 +133,8 @@ def prompt_(input_json):
             'hmm_suffix': suffix_tokens,
             'hmm_generation_offset': len(prefix_tokens),
             'hmm_token_ranges': hmm_token_ranges,
-            'hmm_batch_size': args.hmm_batch_size,
+            # 'hmm_batch_size': args.hmm_batch_size,
+            'hmm_batch_size': num_beams, # We directly use the num_beams as the HMM batch size, to make sure that the llama and Hmm model have the same batch size
         }
 
         stopping_criteria = StoppingCriteriaList([
@@ -245,7 +246,7 @@ def init():
     arg_parser.add_argument('--port', type=int, required=True)
     arg_parser.add_argument('--device', default='cuda', type=str)
     arg_parser.add_argument('--cuda_core', default='1', type=str)
-    arg_parser.add_argument('--hmm_batch_size', default=256, type=int)
+    # arg_parser.add_argument('--hmm_batch_size', default=256, type=int)
     arg_parser.add_argument('--hmm_model_path', default=None, type=str)
     arg_parser.add_argument('--llama_model_path', default='gpt2', type=str)
     arg_parser.add_argument('--suffix_cap', default=10000, type=int)
@@ -302,6 +303,7 @@ if __name__ == '__main__':
         "Instruct": 'Continuation',
         'word_constraint': [],
         'keyword_constraint': [],
+        'banword_constraint': [],
         'token_constraint': [[1, 8]],
         'temperature': 0.8,
         'num_beams': 4,

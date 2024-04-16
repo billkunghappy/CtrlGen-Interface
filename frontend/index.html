@@ -187,8 +187,7 @@
               </div>
             </div>
           </div>
-          <hr class="mt-2 mb-3" id="sep-control" style="display: none;"/>
-          <div class="card card-body">
+          <div class="card card-body" style="display: none;">
             <div class="form-group row">
               <label for="ctrl-banword" class="col-sm-6 col-form-label">Banned Keywords</label>
               <div class="col-sm-6 ml-auto mr-0">
@@ -204,6 +203,7 @@
                 <div class="col-sm-6 ml-auto mr-0">
                   <select id="ctrl-length_unit" class="form-select form-control">
                     <option value="none" selected>None</option>
+                    <option value="token">Token</option>
                     <option value="word">Word</option>
                     <!-- <option value="sentence">Sentence</option>
                     <option value="passage">Passage</option> -->
@@ -224,7 +224,7 @@
             <div class="form-group row">
               <label for="ctrl-instruct" class="col-sm-4 col-form-label">Instruction</label>
               <div class="col-sm-8 ml-auto mr-0">
-                <input type="text" id="ctrl-instruct" class="form-control", placeholder="Continue the text by...">
+                <input type="text" id="ctrl-instruct" class="form-control", placeholder="Continue the text _____ .">
               </div>
             </div>
           </div>
