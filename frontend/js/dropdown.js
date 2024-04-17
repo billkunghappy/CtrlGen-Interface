@@ -44,6 +44,12 @@ function emptyDropdownMenu() {
 function openDropdownMenu(source, is_reopen=false) {
   if ($('#frontend-overlay').hasClass('hidden')){
     $('#frontend-overlay').removeClass('hidden');
+    // Disable the editor until the suggestion dropdown is closed
+    // Before that, remember the cursor position
+    // cursor_range = quill.getSelection();
+    // currentIndex = cursor_range[0] + cursor_range[1]
+    quill.enable(false); 
+    // quill.blur();
   }
 
   if (is_reopen == true) {
@@ -53,8 +59,9 @@ function openDropdownMenu(source, is_reopen=false) {
   }
 }
 
-function close_dropdown(click_item = false){
-  if (hideDropdownMenu(EventSource.USER)){
+function close_dropdown(click_item = false, abort = false){
+  // console.log(click_item);
+  if (hideDropdownMenu(EventSource.USER, abort = abort)){
     if (!click_item) {
       remove_to_rewrite();
     }
@@ -62,16 +69,26 @@ function close_dropdown(click_item = false){
       // Click the item
       dropdown_container.find('.dropdown-item:nth-child(2)').click();
     }
+    // Adter the dropdown is closed, enable the editor and set the cursor
+    quill.enable();
+    quill.focus();
+    // quill.setSelection(currentIndex);
   }
   
 }
 
-function hideDropdownMenu(source) {
+function hideDropdownMenu(source, abort = false) {
   if ($('#frontend-overlay').length && !$('#frontend-overlay').hasClass('hidden')){
     $('#frontend-overlay').addClass('hidden');
     $('.sudo-hover').removeClass('sudo-hover');  // NOTE Do not delete; error
-    logEvent(EventName.SUGGESTION_CLOSE, source);
-    console.log("Hide");
+    if (abort){
+      // Remove the suggestions
+      logEvent(EventName.SUGGESTION_ABORT, EventSource.USER);
+    }
+    else{
+      logEvent(EventName.SUGGESTION_CLOSE, source);
+    }
+    // console.log("Hide");
     return true;
   }
   return false;
@@ -79,7 +96,7 @@ function hideDropdownMenu(source) {
 
 function selectDropdownItem(suggestion){
   // Close dropdown menu after selecting new suggestion
-  logEvent(EventName.SUGGESTION_SELECT, EventSource.USER);
+  // logEvent(EventName.SUGGESTION_SELECT, EventSource.USER);
   // hideDropdownMenu(EventSource.API);
   // appendText(suggestion);
   remove_all_format();
@@ -108,7 +125,7 @@ function addToDropdownMenu(suggestion_with_probability) {
   if (trimmed.length > 0) {
     $('#frontend-overlay').append(function() {
       return $('<div class="dropdown-item" data-source="' + source + '" data-original="' + original + '">' + trimmed + '</div>').click(function(){
-        console.log("click!");
+        // console.log("click!");
         currentHoverIndex = index;
         currentIndex = index;
         selectDropdownItem(original);
@@ -175,7 +192,6 @@ function showDropdownMenu(source, is_reopen=false) {
     
     var editor_center = ($("#frontend").outerWidth(true) + parseInt($("#frontend").css("margin-left")))/2;
     var editor_max_width = Math.floor(($("#frontend").outerWidth(true) - parseInt($("#frontend").css("margin-left")))*0.8);
-    console.log(editor_max_width);
     $(".dropdown-item").each(function(){
         width = $(this).outerWidth(true);
         height = $(this).outerHeight(true);
@@ -215,10 +231,10 @@ function showDropdownMenu(source, is_reopen=false) {
     }
 
     if (moveUpDropdown) {
-      console.log('$("#editor-view").height(): ' + $("#editor-view").height());
-      console.log('top: ' + top);
-      console.log('offsetTop: ' + offsetTop);
-      console.log('totalHeight: ' + totalHeight);
+      // console.log('$("#editor-view").height(): ' + $("#editor-view").height());
+      // console.log('top: ' + top);
+      // console.log('offsetTop: ' + offsetTop);
+      // console.log('totalHeight: ' + totalHeight);
 
       // Adjust height
       var maxHeight = top - 100;

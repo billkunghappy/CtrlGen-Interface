@@ -72,8 +72,7 @@ $(function() {
     if ($(e.target).closest("#frontend-overlay").length > 0) {
       return false;
     } else {
-      logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
-      close_dropdown();
+      close_dropdown(click_item = false, abort = true);
     }
   });
 
@@ -106,9 +105,10 @@ $(function() {
           // }
           // currentItem = $('.dropdown-item').get(currentIndex);
           // $(currentItem).addClass('sudo-hover');
-          vertCycleDropdownUp();
-
-          logEvent(EventName.SUGGESTION_UP, EventSource.USER);
+          if (!$('#frontend-overlay').hasClass('hidden')){
+            vertCycleDropdownUp();
+            logEvent(EventName.SUGGESTION_UP, EventSource.USER);
+          }
           break;
 
         case down:
@@ -120,24 +120,27 @@ $(function() {
           // }
           // currentItem = $('.dropdown-item').get(currentIndex);
           // $(currentItem).addClass('sudo-hover');
-          vertCycleDropdownDown();
-
-          logEvent(EventName.SUGGESTION_DOWN, EventSource.USER);
+          if (!$('#frontend-overlay').hasClass('hidden')){
+            vertCycleDropdownDown();
+            logEvent(EventName.SUGGESTION_DOWN, EventSource.USER);
+          }
           break;
 
         case esc:
-          logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
-          close_dropdown();
+          // logEvent(EventName.SUGGESTION_ABORT, EventSource.USER);
+          close_dropdown(click_item = false, abort = true);
           break;
-
         case tab:
           break;
         case shift:
           break;
-        default:
-          logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
+        case enter:
+          // logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
           close_dropdown(click_item = true);
-          // close_dropdown();
+          return;
+        default:
+          // logEvent(EventName.SUGGESTION_CLOSE, EventSource.USER);
+          // close_dropdown(click_item = true);
           return;
       }
       e.preventDefault();

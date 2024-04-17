@@ -4,6 +4,7 @@ Parse user prompts and responses from the OpenAI API.
 
 from nltk.tokenize import sent_tokenize, word_tokenize
 import numpy as np
+import string
 
 
 def parse_prompt(text, max_tokens, context_window_size):
@@ -165,3 +166,39 @@ def filter_suggestions(
         'bad_cnt': bad_cnt,
     }
     return filtered_suggestions, counts
+
+
+
+def custom_filter_suggestions(
+    suggestions,
+    prefix = "",
+    suffix = "",
+    ):
+    """
+    Custom function to filter suggestions
+    """
+    # Get word list
+    def get_word_list(text):
+        return text.translate(str.maketrans('', '', string.punctuation)).strip().split()
+    filtered_suggestions = []
+    for (suggestion, probability, source) in suggestions:
+        # if suffix.strip() != "":
+        #     # Has suffix, doing insertion
+        #     suggestion_no_punc = suggestion.translate(str.maketrans('', '', string.punctuation)).strip()
+        #     suffix_no_punc = suffix.translate(str.maketrans('', '', string.punctuation)).strip()
+        #     # Check the first word in suggestion does not match the first in suffix
+        #     print(f"Check Insertion First Word: {suggestion_no_punc.split()[0]} != {suffix_no_punc.split()[0]} is {suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]}")
+        #     if suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]:
+        #         filtered_suggestions.append((suggestion, probability, source))
+        
+        #  Custom Filtering Method 1: Solve the repeat of prefix issue
+        suggestion_word_list = get_word_list(suggestion)
+        prefix_word_list = get_word_list(prefix)
+        min_word_len = min(len(suggestion_word_list), len(prefix_word_list))
+        min_word_len = 1 if min_word_len == 0 else min_word_len
+        one_gram_overlap_ratio = len(set(suggestion_word_list[:min_word_len]).intersection(set(prefix_word_list[:min_word_len]))) / min_word_len
+        if one_gram_overlap_ratio < 0.8:
+            filtered_suggestions.append((suggestion, probability, source))
+    if filtered_suggestions == []:
+        filtered_suggestions = suggestions
+    return filtered_suggestions

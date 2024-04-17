@@ -69,6 +69,13 @@ function logEvent(eventName, eventSource, textDelta='', cursorRange=''){
     'currentTopP': $("#ctrl-top_p").val(),
     'currentPresencePenalty': $("#ctrl-presence_penalty").val(),
     'currentFrequencyPenalty': $("#ctrl-frequency_penalty").val(),
+    
+    // Ctrl
+    "ctrl_keyword": $("#ctrl-keyword").val(),
+    "ctrl_banword": $("#ctrl-banword").val(),
+    "ctrl_length_unit": $("#ctrl-length_unit").val(),
+    "ctrl_length": [$('#ctrl-length-slider > input:eq(0)').val(), $('#ctrl-length-slider > input:eq(1)').val()],
+    "ctrl_instruct": $("#ctrl-instruct").val(),
 
     // Store original suggestions that may include empty strings, duplicates, and toxic language
     'originalSuggestions': [],
@@ -116,6 +123,7 @@ function showLog(replayLog) {
     frequency_penalty
   )
   try {
+    console.log("Replay: " + replayLog.eventName);
     switch(replayLog.eventName) {
       case EventName.SYSTEM_INITIALIZE:
         setText(replayLog.currentDoc);
@@ -139,11 +147,19 @@ function showLog(replayLog) {
         setCursor(replayLog.currentCursor);
         break;
       case EventName.CURSOR_SELECT:
-        setCursor(replayLog.currentCursor);
+        setCursor(replayLog.cursorRange.index, replayLog.cursorRange.length);
         break;
       case EventName.SUGGESTION_GET:
         // Spin icon to indicate loading
         showLoadingSignal();
+        let range = quill.getSelection();
+        if (range.length > 0){
+          // Store the to rewrite part
+          update_to_rewrite(range.index, range.length);
+        }
+        else{
+          reset_to_rewrite();
+        }
         break;
       case EventName.SUGGESTION_OPEN:
         hideLoadingSignal();
@@ -179,7 +195,10 @@ function showLog(replayLog) {
         // $(currentSuggestion).removeClass('sudo-hover').addClass('sudo-click');
         break;
       case EventName.SUGGESTION_CLOSE:
-        hideDropdownMenu(replayLog.eventSource);
+        close_dropdown(click_item = true);
+        break;
+      case EventName.SUGGESTION_ABORT:
+        close_dropdown(click_item = false, abort = true);
         break;
       case EventName.BUTTON_GENERATE:
         // Spin icon to indicate loading

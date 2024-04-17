@@ -16,7 +16,7 @@ var sessionId = '';  // Changed when refreshed
 var example = '';
 var exampleActualText = '';
 var stop = new Array();
-var engine = '';
+var engine = null;
 var promptLength = 0;
 var promptText = 0;
 
@@ -63,6 +63,7 @@ const EventName = {
   SUGGESTION_HOVER: 'suggestion-hover',
   SUGGESTION_SELECT: 'suggestion-select',
   SUGGESTION_CLOSE: 'suggestion-close',
+  SUGGESTION_ABORT: 'suggestion-abort',
   SKIP: 'skip',
 
   // Filtering
@@ -80,7 +81,14 @@ const ReplayableEvents = [
   EventName.CURSOR_FORWARD, EventName.CURSOR_BACKWARD, EventName.CURSOR_SELECT,
   EventName.SUGGESTION_GET, EventName.SUGGESTION_OPEN, EventName.SUGGESTION_REOPEN,
   EventName.SUGGESTION_UP, EventName.SUGGESTION_DOWN, EventName.SUGGESTION_HOVER,
-  EventName.SUGGESTION_SELECT, EventName.SUGGESTION_CLOSE,
+  EventName.SUGGESTION_SELECT, EventName.SUGGESTION_CLOSE, EventName.SUGGESTION_ABORT,
+];
+
+//  For events that require longer delay
+const DelayReplayEvents = [
+  EventName.SUGGESTION_GET, EventName.SUGGESTION_OPEN, EventName.SUGGESTION_REOPEN,
+  EventName.SUGGESTION_UP, EventName.SUGGESTION_DOWN, EventName.SUGGESTION_HOVER,
+  EventName.SUGGESTION_SELECT, EventName.SUGGESTION_CLOSE, EventName.SUGGESTION_ABORT,
 ];
 
 Object.freeze(EventName);

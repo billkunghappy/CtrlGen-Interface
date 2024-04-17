@@ -3,7 +3,6 @@ var checkFormatLockTime = new Date();  // for template
 /* Setup */
 function trackTextChanges(){
   quill.on('text-change', function(delta, oldDelta, source) {
-    console.log("Text Change");
     if (source != 'user') {
       // We only track user interaction here
       return;
@@ -23,7 +22,7 @@ function trackTextChanges(){
         eventName = EventName.TEXT_DELETE;
       } else {
         eventName = EventName.SKIP;
-        console.log('Ignore format change');
+        // console.log('Ignore format change');
       }
       logEvent(eventName, eventSource, textDelta=delta);
 
@@ -59,7 +58,7 @@ function trackTextChangesByMachineOnly(){
       eventName = EventName.TEXT_DELETE;
     } else {
       eventName = EventName.SKIP;
-      console.log('Ignore format change');
+      // console.log('Ignore format change');
     }
 
     // Ignore text-change by user and reset to oldDelta
@@ -81,7 +80,7 @@ function trackTextChangesByMachineOnly(){
           quill.setContents(oldDelta, 'silent');
         }
     } else {
-      console.log('Ignore unknown change:', source, eventName);
+      // console.log('Ignore unknown change:', source, eventName);
     }
 
     if (isCounterEnabled == true) {
@@ -115,7 +114,7 @@ function trackSelectionChange(){
       } else {
         if (debug) {
           alert('Wrong selection-change handling!');
-          console.log(range, oldRange, source);
+          // console.log(range, oldRange, source);
         }
         eventName = EventName.SKIP;
       }
@@ -285,8 +284,7 @@ function getCursorIndex() {
   }
 }
 
-function setCursor(index) {
-  console.log("set cursor");
+function setCursor(index, length = 0) {
   // Adjust if index is outside of range
   let doc = quill.getText(0);
   let lastIndex = doc.length - 1;
@@ -294,7 +292,7 @@ function setCursor(index) {
     index = lastIndex;
   }
 
-  quill.setSelection(index);
+  quill.setSelection(index, length);
   prevCursorIndex = index;
 }
 
@@ -323,7 +321,6 @@ function appendText(text) {
   remove_to_rewrite();
   // Now we can insert the new text, and also store these machine generated text as to_rewrite
   let curIndex = getCursorIndex();
-  console.log("Insert text: #" + text + "# -- "+ String(curIndex));
   quill.insertText(curIndex, text, source = "api");
   update_to_rewrite(curIndex, text.length);
   setCursor(curIndex + text.length);
@@ -339,7 +336,7 @@ function appendText(text) {
       reset_to_rewrite();
       remove_all_format();
       disable_token_control();
-      console.log("Editor changed by user, remove format and disable token control...")
+      // console.log("Editor changed by user, remove format and disable token control...")
     }
   });
 }
@@ -349,7 +346,7 @@ function remove_all_format(){
   quill.formatText(0, 100000, {
     'color': 'black'
   });
-  console.log("remove format");
+  // console.log("remove format");
 }
 
 
@@ -385,7 +382,7 @@ function remove_to_rewrite(){
     quill.deleteText(to_rewrite_curIndex, to_rewrite_length);
     setCursor(to_rewrite_curIndex);
     remove_all_format();
-    console.log("Delete to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
+    // console.log("Delete to_rewrite: " + String(to_rewrite_curIndex) + ", " + String(to_rewrite_length));
   }
   reset_to_rewrite();
 }

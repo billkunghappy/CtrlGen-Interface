@@ -15,6 +15,7 @@ from argparse import ArgumentParser
 # For Local Model
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+import string
 
 from reader import (
     read_api_keys, read_log,
@@ -29,7 +30,8 @@ from helper import (
 )
 from parsing import (
     parse_prompt, parse_suggestion, parse_probability,
-    filter_suggestions
+    filter_suggestions,
+    custom_filter_suggestions
 )
 from model_utils import (
     get_gpt_prompt
@@ -216,16 +218,48 @@ def query():
     # Word Constraints
     # TODO: Need to implement sentence/passage constraints
     word_control_type = content['length_unit']
+    user_token_constraint = None
+    # Default constraints value
+    word_range = []
+    token_constraint = [[1, max_tokens]]
+    trunc_len_list = [n]
     if word_control_type == "none":
-        word_range = []
-    else:
+        if selected.strip() == "" and suffix.strip() == "":
+            # Don't do this when word length control is specified or we're doing rewriting
+            # Add: Also don't do this when doing insertion
+            # No word constraints
+            # Set custom here
+            token_constraint = [
+                [1, 24],
+                [16, 40],
+                [32, 56],
+                [1, 64]
+            ]
+            trunc_len_list = [1,1,1,2]
+    elif word_control_type == "word":
         word_range = (
             min(int(content['length'][0]), int(content['length'][1])),
             max(int(content['length'][0]), int(content['length'][1]))
         )
+    elif word_control_type == "token":
+        token_constraint = [[
+            min(int(content['length'][0]), int(content['length'][1])),
+            max(int(content['length'][0]), int(content['length'][1]))
+        ]]
+        trunc_len_list = [n]
+    else:
+        print(f"ERROR! word control type {word_control_type} does not exist!")
     # Keyword & Banword Constraints
     keyword_constraint = [k.strip() for k in content['keyword'].split(";") if k.strip() != ""]
     banword_constraint = [k.strip() for k in content['banword'].split(";") if k.strip() != ""]
+    
+    # Instruct
+    instruction = content['instruct'].strip()
+    if instruction != "":
+        # We need to add a space at the start of the instruction, and remove the last punctuations
+        if instruction[-1] in string.punctuation:
+            instruction = instruction[:-1]
+        instruction = " " + instruction
     
     if engine != "local":
         # Overwrite the prompt. The old version will use the effective prompt. Here we add more descriptions in the prompt for model to do continuation
@@ -234,7 +268,9 @@ def query():
             selected,
             suffix,
             keyword_constraint = keyword_constraint,
-            word_range = word_range
+            word_range = word_range,
+            token_range = token_constraint[0] if word_control_type == "token" else [], # token_constraint[0] to remove the outer list structure
+            instruction = instruction,
         )
         print("Querying OpenAI...")
         # Query GPT-3
@@ -289,20 +325,6 @@ def query():
                 word_range = []
                 trunc_len_list = [1] * n
             else:
-                if (len(word_range) == 0): #and (selected.strip() == ""):
-                    # Don't do this when word length control is specified or we're doing rewriting
-                    # No word constraints
-                    # Set custom here
-                    token_constraint = [
-                        [1, 16],
-                        [16, 32],
-                        [32, 48],
-                        [1, 64]
-                    ]
-                    trunc_len_list = [1,1,1,2]
-                else:
-                    token_constraint = [[1, max_tokens]]
-                    trunc_len_list = [n]
                 DO_TOKEN_RANGE = False
             request_json = {
                 # Input Text
@@ -310,7 +332,7 @@ def query():
                 "Suffix": suffix,
                 "Prior": selected,
                 # Constraints
-                "Instruct": content['instruct'],
+                "Instruct": instruction,
                 'word_constraint': word_range,
                 'keyword_constraint': keyword_constraint,
                 'banword_constraint': banword_constraint,
@@ -477,6 +499,10 @@ def query():
             # prev_suggestions,
             filtered_suggestions,
             blocklist,
+        )
+        filtered_suggestions_= custom_filter_suggestions(
+            filtered_suggestions_,
+            suffix = suffix
         )
         # Get the num_return_sequence of highest prob sequence here
         filtered_suggestions_ = filtered_suggestions_[:trunc_len]
