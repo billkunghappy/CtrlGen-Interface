@@ -2,7 +2,7 @@ from HMM.hmm_model import *
 from transformers import LogitsProcessor
 import torch
 import json
-from typing import TypeAlias
+# from typing import TypeAlias
 from string import Template
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
@@ -24,8 +24,8 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
         operation = "Write"
     return operation
 
-Vector: TypeAlias = list[float]
-def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int]):
+# Vector: TypeAlias = list[float]
+def get_gpt_prompt(prefix, prior, suffix, keyword_constraint, word_range):
     # Including 3 basic prompts: [Continuation, Insertion, Rewrite]
     # Also includes 6 types of constraints: [Freeform, Keyword, Wordlength, Tokenlength(Deprecated), Keyword+Wordlength, Keyword+Tokenlength(Deprecated)]
     # We do not do token constaints in our interface, so the types of constraints will be [Freeform, Keyword, Wordlength, Keyword+Wordlength]
@@ -62,7 +62,7 @@ def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_ra
         suffix = suffix
     )
     return GPT_prompt
-    
+
 
 
 def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, operation):
@@ -93,13 +93,14 @@ def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, o
 
 
 def hash_hmm_status(prefix_tokens, suffix_tokens,
-    token_constraint, word_constraint, keyword_constraint, Suffix):
+    token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix):
 
     return (tuple(prefix_tokens),
         tuple(suffix_tokens),
         tuple(sorted([tuple(x) for x in token_constraint])),
         tuple(word_constraint),
         tuple(sorted(keyword_constraint)),
+        tuple(sorted(banword_constraint)),
         Suffix == '')
 
 
@@ -190,3 +191,23 @@ class ConstraintLogitsProcessor(LogitsProcessor):
 
         return logits
 
+
+class BaseModelLogitsProcessor(LogitsProcessor):
+    def __init__(self, prompt_len, suffix_tokens, suffix_no_repeat_n_gram=3):        
+        self.config = {
+            'prompt_len': prompt_len,
+            'suffix_tokens': suffix_tokens,
+            'suffix_no_repeat_n_gram': suffix_no_repeat_n_gram,
+        }
+
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        neginf_cuda = -1e30 * torch.ones(1, device=scores.device)
+
+        generation_len = input_ids.shape[1] - self.config['prompt_len']
+        if generation_len == self.config['suffix_no_repeat_n_gram'] - 1:
+            for i in range(0, input_ids.shape[0]):
+                if input_ids[i, -generation_len:].tolist() == self.config['suffix_tokens'][:generation_len]:
+                    scores[i, self.config['suffix_tokens'][generation_len]] = neginf_cuda
+
+        return scores

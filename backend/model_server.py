@@ -112,7 +112,7 @@ def prompt_(input_json):
             for col in row]) for row in past_key_values])
 
         current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
-            token_constraint, word_constraint, keyword_constraint, Suffix)
+            token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
 
         if current_hmm_status != hmm_status:            
             hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
@@ -302,6 +302,7 @@ if __name__ == '__main__':
         "Instruct": 'Continuation',
         'word_constraint': [],
         'keyword_constraint': [],
+        'banword_constraint': [],
         'token_constraint': [[1, 8]],
         'temperature': 0.8,
         'num_beams': 4,
