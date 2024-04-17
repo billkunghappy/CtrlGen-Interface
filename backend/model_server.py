@@ -20,6 +20,7 @@ from model_utils import (
     get_prefix_suffix_tokens_for_HMM,
     get_sequence_scores,
     ConstraintLogitsProcessor,
+    SuffixNoRepeatNGramLogitsProcessor,
     get_operation
 )
 
@@ -100,7 +101,7 @@ def prompt_(input_json):
         global kv_cache
         global hmm_status
 
-        if tuple(prompt_tokens) not in kv_cache:            
+        if tuple(prompt_tokens) not in kv_cache:
             past_key_values = llama_model(torch.tensor([prompt_tokens[:-1]], device=device)).past_key_values
             kv_cache = {tuple(prompt_tokens): past_key_values}
         else:
@@ -114,7 +115,7 @@ def prompt_(input_json):
         current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
             token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
 
-        if current_hmm_status != hmm_status:            
+        if current_hmm_status != hmm_status:
             hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
                 token_constraint, dfa_model)
             hmm_status = current_hmm_status
@@ -143,6 +144,8 @@ def prompt_(input_json):
             ConstraintLogitsProcessor(hmm_model, hmm_config, temperature=temperature)])
         if no_repeat_ngram_size > 0:
             logits_processor.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
+        if args.suffix_no_repeat_ngram_size > 0:
+            logits_processor.append(SuffixNoRepeatNGramLogitsProcessor(len(prompt_tokens), suffix_tokens, args.suffix_no_repeat_ngram_size))
 
         # If use beam search
         if args.do_beam_search:
@@ -252,6 +255,7 @@ def init():
     arg_parser.add_argument('--suffix_cap', default=10000, type=int)
     arg_parser.add_argument('--do_beam_search', action='store_true')
     arg_parser.add_argument('--llama_insertion', action='store_true', help="If sepecified, provide suffix to the llama model during insertion.")
+    arg_parser.add_argument('--suffix_no_repeat_n_gram_size', default=0, type=int)
     arg_parser.add_argument('--debug', action='store_true')
 
     args = arg_parser.parse_args()

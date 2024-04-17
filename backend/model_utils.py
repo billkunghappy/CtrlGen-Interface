@@ -202,12 +202,12 @@ class ConstraintLogitsProcessor(LogitsProcessor):
         return logits
 
 
-class BaseModelLogitsProcessor(LogitsProcessor):
-    def __init__(self, prompt_len, suffix_tokens, suffix_no_repeat_n_gram=3):        
+class SuffixNoRepeatNGramLogitsProcessor(LogitsProcessor):
+    def __init__(self, prompt_len, suffix_tokens, suffix_no_repeat_ngram_size=3):        
         self.config = {
             'prompt_len': prompt_len,
             'suffix_tokens': suffix_tokens,
-            'suffix_no_repeat_n_gram': suffix_no_repeat_n_gram,
+            'suffix_no_repeat_ngram_size': suffix_no_repeat_ngram_size,
         }
 
 
@@ -215,7 +215,7 @@ class BaseModelLogitsProcessor(LogitsProcessor):
         neginf_cuda = -1e30 * torch.ones(1, device=scores.device)
 
         generation_len = input_ids.shape[1] - self.config['prompt_len']
-        if generation_len == self.config['suffix_no_repeat_n_gram'] - 1:
+        if generation_len == self.config['suffix_no_repeat_ngram_size'] - 1:
             for i in range(0, input_ids.shape[0]):
                 if input_ids[i, -generation_len:].tolist() == self.config['suffix_tokens'][:generation_len]:
                     scores[i, self.config['suffix_tokens'][generation_len]] = neginf_cuda
