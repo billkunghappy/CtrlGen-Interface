@@ -174,10 +174,11 @@ def prompt_(input_json):
         # clean up output, removing padding, eos, and (partial) suffix
         sequences = outputs.tolist()
         output_ids = []
-        sequence_ids = []
-        mask1, mask2 = [], []
         for seq in sequences:
+            # remove prompt
             seq = seq[len(prompt_tokens):]
+
+            # remove trailing <unk> and <eos>
             while seq[-1] == 0:
                 seq = seq[:-1]
             while seq[-1] == 2:
@@ -190,24 +191,16 @@ def prompt_(input_json):
                     break
 
             output_ids.append(seq)
-            sequence_ids.append(list(prompt_tokens) + list(seq) + list(suffix_tokens))
 
-            check_suffix_len = min(5, len(suffix_tokens))
-
-            mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(seq) + [0.0] * len(suffix_tokens))
-            mask2.append([0.0] * (len(prompt_tokens)+len(seq)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
-
-        # get scores
-        max_len = max([len(x) for x in sequence_ids])
-        sequence_ids = [x + [0] * (max_len - len(x)) for x in sequence_ids]
-        mask1 = [x + [0.0] * (max_len - len(x)) for x in mask1]
-        mask2 = [x + [0.0] * (max_len - len(x)) for x in mask2]
-        sequence_ids = torch.tensor(sequence_ids, device=device)
-        mask1 = torch.tensor(mask1, device=device)
-        mask2 = torch.tensor(mask2, device=device)
-
-        generation_scores, suffix_scores = get_sequence_scores(llama_model,
-            sequence_ids, mask1, mask2, past_key_values)
+        if args.rank_without_prompt:
+            prefix_past_key_values = llama_model(torch.tensor([(1,) + prefix_tokens[:-1]], device=device)).past_key_values
+            prefix_past_key_values = tuple([tuple([col.expand(len(output_ids), -1, -1, -1).contiguous()
+                for col in row]) for row in prefix_past_key_values])
+            generation_scores, suffix_scores = get_sequence_scores(llama_model, output_ids,
+                (1,) + prefix_tokens, suffix_tokens, prefix_past_key_values)
+        else:
+            generation_scores, suffix_scores = get_sequence_scores(llama_model, output_ids,
+                prompt_tokens, suffix_tokens, past_key_values)
 
         # Here to deal with the space after prefix and before suffix by adding the tokens back to decode the entire story, and remove the prefix, suffix text
         real_prefix_tokens = tokenizer.encode(RawPrefix)
@@ -255,7 +248,8 @@ def init():
     arg_parser.add_argument('--suffix_cap', default=10000, type=int)
     arg_parser.add_argument('--do_beam_search', action='store_true')
     arg_parser.add_argument('--llama_insertion', action='store_true', help="If sepecified, provide suffix to the llama model during insertion.")
-    arg_parser.add_argument('--suffix_no_repeat_n_gram_size', default=0, type=int)
+    arg_parser.add_argument('--suffix_no_repeat_ngram_size', default=0, type=int)
+    arg_parser.add_argument('--rank_without_prompt', action='store_true')
     arg_parser.add_argument('--debug', action='store_true')
 
     args = arg_parser.parse_args()
