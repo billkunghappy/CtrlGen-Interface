@@ -192,7 +192,7 @@ def custom_filter_suggestions(
         #     print(f"Check Insertion First Word: {suggestion_no_punc.split()[0]} != {suffix_no_punc.split()[0]} is {suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]}")
         #     if suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]:
         #         filtered_suggestions.append((suggestion, probability, source))
-        
+
         # Custom Filtering Method 1: Solve the repeat of prefix issue
         suggestion_word_list = get_word_list(suggestion)
         prefix_word_list = get_word_list(prefix)
@@ -208,7 +208,7 @@ def custom_filter_suggestions(
             continue
         if len([c for c in tmp if c.isalpha()]) / len(tmp) < 0.8:
             continue
-            
+
         filtered_suggestions.append((suggestion, probability, source))
 
     if filtered_suggestions == []:
