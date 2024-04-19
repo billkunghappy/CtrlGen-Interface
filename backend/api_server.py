@@ -544,7 +544,7 @@ def query():
         return lcs[len(text_a), len(text_b)] / min(len(text_a), len(text_b))
 
     selected_texts = []
-    similarity_threshold = 0.3
+    similarity_threshold = args.similarity_threshold
     trunc_len_list_cnt = [0] * len(trunc_len_list)
     # take iterations to select suggestions, prioritizing diversity
     while True:
@@ -562,8 +562,8 @@ def query():
         if trunc_len_list_cnt == trunc_len_list:
             break
         similarity_threshold += 0.1
-        print(trunc_len_list_cnt)
-        print(similarity_threshold)
+        # print(trunc_len_list_cnt)
+        # print(similarity_threshold)
 
     # gather result
     original_suggestions_sorted = original_suggestions
@@ -671,6 +671,7 @@ if __name__ == '__main__':
                         help="Specify the local model port file. In this file, each line should have a number, which is the port. Should be specify together with local_model_server_port")
     # Optional arguments
     parser.add_argument('--num_beams', type=int, default = 64, help = "The beam size or the number of returned samples for local model.")
+    parser.add_argument('--similarity_threshold', type=float, default=0.3, help="The similarity threshold for controlling diversity, range between 0 and 1, the lower the value the more diverse.")
     parser.add_argument('--replay_dir', type=str, default='../logs')
 
     parser.add_argument('--debug', action='store_true')
