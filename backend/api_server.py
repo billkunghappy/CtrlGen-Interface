@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import string
+import threading
 
 from reader import (
     read_api_keys, read_log,
@@ -34,7 +35,9 @@ from parsing import (
     custom_filter_suggestions
 )
 from model_utils import (
-    get_gpt_prompt
+    get_gpt_prompt,
+    retrieve_prediction_cache,
+    check_background_cache
 )
 
 from flask import Flask, request, jsonify
@@ -47,6 +50,8 @@ warnings.filterwarnings("ignore", category=FutureWarning)  # noqa
 SESSIONS = dict()
 app = Flask(__name__)
 CORS(app)  # For Access-Control-Allow-Origin
+
+PRED_CACHE = dict()
 
 SUCCESS = True
 FAILURE = False
@@ -100,6 +105,7 @@ def start_session():
         'start_timestamp': time(),
         'last_query_timestamp': time(),
         'verification_code': verification_code,
+        'lock': threading.Lock(), # Creat global lock
     }
     SESSIONS[session_id].update(config.convert_to_dict())
 
@@ -166,6 +172,11 @@ def query():
     session_id = content['session_id']
     domain = content['domain']
     prev_suggestions = content['suggestions']
+    
+    # This is an async function within the same session
+    print(f"Try to acquire key for session: {session_id}")
+    SESSIONS[session_id]['lock'].acquire()
+    print(f"Successfully acquire key for session: {session_id}")
 
     results = {}
     try:
@@ -177,6 +188,7 @@ def query():
     if session_id not in SESSIONS:
         results['status'] = FAILURE
         results['message'] = f'Your session has not been established due to invalid access code. Please check your access code in URL.'
+        SESSIONS[session_id]['lock'].release()
         return jsonify(results)
 
     example = content['example']
@@ -224,9 +236,8 @@ def query():
     token_constraint = [[1, max_tokens]]
     trunc_len_list = [n]
     if word_control_type == "none":
-        if selected.strip() == "" and suffix.strip() == "":
+        if selected.strip() == "":
             # Don't do this when word length control is specified or we're doing rewriting
-            # Add: Also don't do this when doing insertion
             # No word constraints
             # Set custom here
             token_constraint = [
@@ -308,6 +319,7 @@ def query():
             results['status'] = FAILURE
             results['message'] = str(e)
             print(e)
+            SESSIONS[session_id]['lock'].release()
             return jsonify(results)
     else:
         print("Querying local model...")
@@ -387,34 +399,45 @@ def query():
                         return await asyncio.gather(*[
                             fetch(url, data) for url, data in zip(urls, data_list)
                         ])
-                # Running Async
-                print(f"Sending Post Request to Servers:", local_model_server_list)
-                result_text_list = asyncio.run(async_aiohttp_post_all(local_model_server_list, [request_json] * len(local_model_server_list)))
-                print(f"Results Fetched...")
-                # --------------------- Gather results -----------------------
-                # results = [{
-                #     "token_range": [int, int]],
-                #     "beam_outputs_texts": [str],
-                #     "beam_outputs_sequences_scores_generation": [float],
-                #     "beam_outputs_sequences_scores_suffix": [float],
-                # }, ...]
                 all_token_range_output = {}
-                for result_text in result_text_list:
-                    result_data = json.loads(result_text)
-                    # result_data is a list, each item is the results of a token_range.
-                    for result_data_per_token_range in result_data:
-                        token_range_str = json.dumps(result_data_per_token_range["token_range"])
-                        if not (token_range_str in all_token_range_output):
-                            all_token_range_output[token_range_str] = {}
-                        if 'beam_outputs_texts' in all_token_range_output[token_range_str]:
-                            all_token_range_output[token_range_str]['beam_outputs_texts'] += result_data_per_token_range['beam_outputs_texts']
-                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] += result_data_per_token_range['beam_outputs_sequences_scores_generation']
-                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] += result_data_per_token_range['beam_outputs_sequences_scores_suffix']
-                        else: #Init
-                            all_token_range_output[token_range_str]['beam_outputs_texts'] = result_data_per_token_range['beam_outputs_texts']
-                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] = result_data_per_token_range['beam_outputs_sequences_scores_generation']
-                            all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] = result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                print("start checking")
+                if check_background_cache(PRED_CACHE, content):
+                    print("Exist and is using background cache. Skip model generation...")
+                else:
+                    print("Doesn't exist background cache...")
+                    # Running Async
+                    print(f"Sending Post Request to Servers:", local_model_server_list)
+                    result_text_list = asyncio.run(async_aiohttp_post_all(local_model_server_list, [request_json] * len(local_model_server_list)))
+                    print(f"Results Fetched...")
+                    # --------------------- Gather results -----------------------
+                    # results = [{
+                    #     "token_range": [int, int]],
+                    #     "beam_outputs_texts": [str],
+                    #     "beam_outputs_sequences_scores_generation": [float],
+                    #     "beam_outputs_sequences_scores_suffix": [float],
+                    # }, ...]
+                    for result_text in result_text_list:
+                        result_data = json.loads(result_text)
+                        # result_data is a list, each item is the results of a token_range.
+                        for result_data_per_token_range in result_data:
+                            token_range_str = json.dumps(result_data_per_token_range["token_range"])
+                            if not (token_range_str in all_token_range_output):
+                                all_token_range_output[token_range_str] = {}
+                            if 'beam_outputs_texts' in all_token_range_output[token_range_str]:
+                                all_token_range_output[token_range_str]['beam_outputs_texts'] += result_data_per_token_range['beam_outputs_texts']
+                                all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] += result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                                all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] += result_data_per_token_range['beam_outputs_sequences_scores_suffix']
+                            else: #Init
+                                all_token_range_output[token_range_str]['beam_outputs_texts'] = result_data_per_token_range['beam_outputs_texts']
+                                all_token_range_output[token_range_str]['beam_outputs_sequences_scores_generation'] = result_data_per_token_range['beam_outputs_sequences_scores_generation']
+                                all_token_range_output[token_range_str]['beam_outputs_sequences_scores_suffix'] = result_data_per_token_range['beam_outputs_sequences_scores_suffix']
                 # print("Gathered Results:", all_token_range_output)
+                # Check Previous Cache
+                all_token_range_output = retrieve_prediction_cache(
+                    CACHE = PRED_CACHE, 
+                    content = content,
+                    prediction = all_token_range_output
+                )
                 # Check
                 retrieved_token_ranges = list(all_token_range_output.keys())
                 requested_token_ranges = [json.dumps(token_range) for token_range in token_constraint]
@@ -471,6 +494,7 @@ def query():
             results['status'] = FAILURE
             results['message'] = str(e)
             print(e)
+            SESSIONS[session_id]['lock'].release()
             return jsonify(results)
     # Got the results from GPT or local models, in suggestions_list        
     original_suggestions = []
@@ -529,9 +553,10 @@ def query():
     if not DO_TOKEN_RANGE:
         rank_idx_list = np.array([ - choice['probability'] for choice in suggestions_with_probabilities]).argsort().tolist()
         # We switch the first two, because the default choice in frontend is the 2nd, which should have the hightest prob
-        tmp = rank_idx_list[0]
-        rank_idx_list[0] = rank_idx_list[1]
-        rank_idx_list[1] = tmp
+        if len(rank_idx_list) > 1:
+            tmp = rank_idx_list[0]
+            rank_idx_list[0] = rank_idx_list[1]
+            rank_idx_list[1] = tmp
         for i, rank_idx in enumerate(rank_idx_list):
             original_suggestions_sorted.append(original_suggestions[rank_idx])
             suggestions_with_probabilities_sorted.append(suggestions_with_probabilities[rank_idx])
@@ -553,6 +578,7 @@ def query():
     }
     results['counts'] = counts
     print_verbose('Result', results, verbose)
+    SESSIONS[session_id]['lock'].release()
     return jsonify(results)
 
 
@@ -690,11 +716,12 @@ if __name__ == '__main__':
     allowed_access_codes = read_access_codes(config_dir)
 
     global session_id_history
-    metadata = dict()
-    metadata = update_metadata(
-        metadata,
-        metadata_path
-    )
+    # Potential Bug
+    # metadata = dict()
+    # metadata = update_metadata(
+    #     metadata,
+    #     metadata_path
+    # )
 
     global verbose
     verbose = args.verbose

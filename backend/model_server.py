@@ -134,7 +134,7 @@ def prompt_(input_json):
             'hmm_generation_offset': len(prefix_tokens),
             'hmm_token_ranges': hmm_token_ranges,
             # 'hmm_batch_size': args.hmm_batch_size,
-            'hmm_batch_size': num_beams, # We directly use the num_beams as the HMM batch size, to make sure that the llama and Hmm model have the same batch size
+            'hmm_batch_size': num_beams*num_token_ranges, # We directly use the num_beams as the HMM batch size, to make sure that the llama and Hmm model have the same batch size
         }
 
         stopping_criteria = StoppingCriteriaList([

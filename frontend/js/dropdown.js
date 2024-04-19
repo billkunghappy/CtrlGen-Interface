@@ -72,6 +72,10 @@ function close_dropdown(click_item = false, abort = false){
     // Adter the dropdown is closed, enable the editor and set the cursor
     quill.enable();
     quill.focus();
+    if (abort){
+      quill.insertText(quill.getSelection().index, original_to_rewrite_text);
+    }
+    original_to_rewrite_text = "";
     // quill.setSelection(currentIndex);
   }
   

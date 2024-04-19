@@ -57,8 +57,21 @@ async function endSession() {
   const results = await wwai.api.endSession(sessionId, logs);
   const verificationCode = results['verification_code'];
 
+  if (engine == 'local') {
+    form_link = post_survey_form_ctrlg;
+    form_link_name = "Post Survey Form (Ctrl-G)";
+  }
+  else{
+    form_link = post_survey_form_gpt;
+    form_link_name = "Post Survey Form (GPT)";
+  }
+
   $('#verification-code').removeClass('do-not-display');
   $('#verification-code').html('Verification code: ' + verificationCode);
+  $('#form-link').removeClass('do-not-display');
+  $('#form-link').attr('href', form_link);
+  $('#form-link').html(form_link_name);
+  // $('#form-link').html("ddddddd");
 }
 
 async function endSessionWithReplay() {
@@ -384,6 +397,7 @@ function queryGPT3() {
   if (range.length > 0){
     // Store the to rewrite part
     update_to_rewrite(range.index, range.length);
+    original_to_rewrite_text = quill.getText(range.index, range.length);
   }
   else{
     reset_to_rewrite();
@@ -402,6 +416,11 @@ function queryGPT3() {
     crossDomain: true,
     contentType: 'application/json; charset=utf-8',
     success: function(data) {
+      // If success and do background generating
+      if (background_query && engine == "local"){
+        queryGPT3_background(); // store cache in backend server
+      }
+
       hideLoadingSignal();
       if (data.status == SUCCESS) {
         if (data.original_suggestions.length > 0) {
@@ -437,6 +456,31 @@ function queryGPT3() {
     error: function() {
       hideLoadingSignal();
       alert("Could not get suggestions. Press tab key to try again! If the problem persists, please send a screenshot of this message to " + contactEmail + ". Our sincere apologies for the inconvenience!");
+    }
+  });
+}
+
+function queryGPT3_background() {
+  const doc = getText();
+  // get the selected range
+  let range = quill.getSelection();
+  const exampleText = exampleActualText;
+  const data = getDataForQuery(doc, exampleText, range.index, range.length);
+  // Add the background_query flag to the system
+  data['background_query'] = true;
+  $.ajax({
+    url: serverURL + '/api/query',
+    type: 'POST',
+    dataType: 'json',
+    data: JSON.stringify(data),
+    crossDomain: true,
+    contentType: 'application/json; charset=utf-8',
+    success: function(data) {
+      if (data.status == SUCCESS) {
+        console.log("background query success!");
+      } else {
+        alert(data.message);
+      }
     }
   });
 }

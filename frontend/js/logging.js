@@ -156,6 +156,7 @@ function showLog(replayLog) {
         if (range.length > 0){
           // Store the to rewrite part
           update_to_rewrite(range.index, range.length);
+          original_to_rewrite_text = quill.getText(range.index, range.length);
         }
         else{
           reset_to_rewrite();

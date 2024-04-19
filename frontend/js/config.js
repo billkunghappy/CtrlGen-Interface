@@ -2,7 +2,7 @@
 /****** Development ********************************************/
 /***************************************************************/
 const debug = false;
-const serverURL = 'http://localhost:8080';
+const serverURL = 'http://131.179.88.55:5555';
 const frontendURL = 'http://127.0.0.1:8000';
 var contactEmail = 'ponienkung@ucla.edu';
 var isCounterEnabled = true;
@@ -134,3 +134,10 @@ var ctrl_token_range_step = 2;
 
 // Whether to apply token control
 var apply_token_control = false;
+
+// Whether to apply background query. This arg only works when the 'engine' is set to 'local' in the url params by &engine=local
+var background_query = true;
+
+// Post survey form
+var post_survey_form_ctrlg = "https://docs.google.com/forms/d/e/1FAIpQLSeVG1fN6ftUCPnVb-aOBtsDi0xGb9-7hF-zsNLhRSpRlvRCgA/viewform?usp=sf_link"
+var post_survey_form_gpt = "https://docs.google.com/forms/d/e/1FAIpQLSe-DBogEOj7jqrW6ovu_Cp6uXk6cp3ywwuWVFllcpiWyg91BQ/viewform?usp=sf_link"

@@ -353,6 +353,7 @@ function remove_all_format(){
 // We have a function to store the to_rewrite part
 var to_rewrite_curIndex = -1;
 var to_rewrite_length = -1;
+var original_to_rewrite_text = "";
 
 
 function reset_to_rewrite(){
