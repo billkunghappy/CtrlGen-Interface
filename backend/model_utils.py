@@ -2,7 +2,6 @@ from HMM.hmm_model import *
 from transformers import LogitsProcessor
 import torch
 import json
-from typing import TypeAlias, Dict, List
 from string import Template
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
@@ -24,8 +23,9 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
         operation = "Write"
     return operation
 
-Vector: TypeAlias = list[float]
-def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int], token_range: list[int], instruction: str):
+# Vector: TypeAlias = list[float]
+# def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int], token_range: list[int], instruction: str):
+def get_gpt_prompt(prefix, prior, suffix, keyword_constraint, word_range, token_range, instruction):
     # Including 3 basic prompts: [Continuation, Insertion, Rewrite]
     # Also includes 6 types of constraints: [Freeform, Keyword, Wordlength, Tokenlength(Deprecated), Keyword+Wordlength, Keyword+Tokenlength(Deprecated)]
     # We do not do token constaints in our interface, so the types of constraints will be [Freeform, Keyword, Wordlength, Keyword+Wordlength]
@@ -53,7 +53,7 @@ def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_ra
     if not ("Tokenlength" in constraints):
         # Reset token range
         token_range = ["", ""]
-            
+
     constraints_str = "+".join(constraints)
     if constraints_str == "": # no constraints:
         constraints_str = "Freeform"
@@ -72,7 +72,7 @@ def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_ra
         instruction = instruction
     )
     return GPT_prompt
-    
+
 
 
 def encode_with_messages_format(Prefix, SoftControl, Suffix, Prior, tokenizer, operation):
@@ -143,7 +143,28 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
     return prefix_tokens, suffix_tokens
 
 
-def get_sequence_scores(llama_model, input_ids, mask1, mask2, past_key_values, batch_size=32):
+def get_sequence_scores(llama_model, output_ids,
+    prompt_tokens, suffix_tokens, past_key_values):
+    device = llama_model.device
+
+    # preprocessing input_ids
+    input_ids = []
+    mask1, mask2 = [], []
+    check_suffix_len = min(5, len(suffix_tokens))
+    for output_id in output_ids:
+        input_ids.append(list(prompt_tokens) + list(output_id) + list(suffix_tokens))
+        mask1.append([0.0] * len(prompt_tokens) + [1.0] * len(output_id) + [0.0] * len(suffix_tokens))
+        mask2.append([0.0] * (len(prompt_tokens)+len(output_id)) + [1.0] * check_suffix_len + [0.0] * (len(suffix_tokens)-check_suffix_len))
+
+    max_len = max([len(x) for x in input_ids])
+    input_ids = [x + [0] * (max_len - len(x)) for x in input_ids]
+    mask1 = [x + [0.0] * (max_len - len(x)) for x in mask1]
+    mask2 = [x + [0.0] * (max_len - len(x)) for x in mask2]
+    input_ids = torch.tensor(input_ids, device=device)
+    mask1 = torch.tensor(mask1, device=device)
+    mask2 = torch.tensor(mask2, device=device)
+
+    # lm forward
     n, d = input_ids.shape
     kv_len = past_key_values[0][0].shape[2]
     with torch.no_grad():
@@ -273,3 +294,23 @@ class ConstraintLogitsProcessor(LogitsProcessor):
 
         return logits
 
+
+class SuffixNoRepeatNGramLogitsProcessor(LogitsProcessor):
+    def __init__(self, prompt_len, suffix_tokens, suffix_no_repeat_ngram_size=3):
+        self.config = {
+            'prompt_len': prompt_len,
+            'suffix_tokens': suffix_tokens,
+            'suffix_no_repeat_ngram_size': suffix_no_repeat_ngram_size,
+        }
+
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        neginf_cuda = -1e30 * torch.ones(1, device=scores.device)
+
+        generation_len = input_ids.shape[1] - self.config['prompt_len']
+        if generation_len == self.config['suffix_no_repeat_ngram_size'] - 1:
+            for i in range(0, input_ids.shape[0]):
+                if input_ids[i, -generation_len:].tolist() == self.config['suffix_tokens'][:generation_len]:
+                    scores[i, self.config['suffix_tokens'][generation_len]] = neginf_cuda
+
+        return scores

@@ -112,6 +112,7 @@ def parse_suggestion(
         start = processed_suggestion.index(first_sentence)
         end = start + len(first_sentence)
         processed_suggestion = processed_suggestion[:end]
+
     return processed_suggestion
 
 
@@ -128,9 +129,10 @@ def filter_suggestions(
         suggestions: a list of (suggestion, probability)
         blocklist: a set of strings
     """
+    # TEMPORARY FIX
     filtered_suggestions = []
-    # duplicates = set([prev_sugg['original'] for prev_sugg in prev_suggestions])
-    duplicates = set([prev_sugg[0] for prev_sugg in prev_suggestions])
+    duplicates = set([prev_sugg['text'] for prev_sugg in prev_suggestions])
+    # duplicates = set([prev_sugg[0] for prev_sugg in prev_suggestions])
 
     empty_cnt = 0
     duplicate_cnt = 0
@@ -190,15 +192,25 @@ def custom_filter_suggestions(
         #     print(f"Check Insertion First Word: {suggestion_no_punc.split()[0]} != {suffix_no_punc.split()[0]} is {suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]}")
         #     if suggestion_no_punc.split()[0] != suffix_no_punc.split()[0]:
         #         filtered_suggestions.append((suggestion, probability, source))
-        
-        #  Custom Filtering Method 1: Solve the repeat of prefix issue
+
+        # Custom Filtering Method 1: Solve the repeat of prefix issue
         suggestion_word_list = get_word_list(suggestion)
         prefix_word_list = get_word_list(prefix)
         min_word_len = min(len(suggestion_word_list), len(prefix_word_list))
         min_word_len = 1 if min_word_len == 0 else min_word_len
         one_gram_overlap_ratio = len(set(suggestion_word_list[:min_word_len]).intersection(set(prefix_word_list[:min_word_len]))) / min_word_len
-        if one_gram_overlap_ratio < 0.8:
-            filtered_suggestions.append((suggestion, probability, source))
+        if one_gram_overlap_ratio > 0.8:
+            continue
+
+        # Custom Filtering Method 2: Solve the issue of "_____ *** ..."
+        tmp = ''.join(suggestion.strip().split())
+        if tmp == '':
+            continue
+        if len([c for c in tmp if c.isalpha()]) / len(tmp) < 0.8:
+            continue
+
+        filtered_suggestions.append((suggestion, probability, source))
+
     if filtered_suggestions == []:
         filtered_suggestions = suggestions
     return filtered_suggestions

@@ -263,7 +263,7 @@ def query():
     # Keyword & Banword Constraints
     keyword_constraint = [k.strip() for k in content['keyword'].split(";") if k.strip() != ""]
     banword_constraint = [k.strip() for k in content['banword'].split(";") if k.strip() != ""]
-    
+
     # Instruct
     instruction = content['instruct'].strip()
     if instruction != "":
@@ -271,7 +271,7 @@ def query():
         if instruction[-1] in string.punctuation:
             instruction = instruction[:-1]
         instruction = " " + instruction
-    
+
     if engine != "local":
         # Overwrite the prompt. The old version will use the effective prompt. Here we add more descriptions in the prompt for model to do continuation
         prompt = get_gpt_prompt(
@@ -352,13 +352,13 @@ def query():
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
                 'num_return_sequences': args.num_beams, # We will return all the generated results, and filter here
-                'num_beams': max(1, args.num_beams // len(token_constraint)), 
-                'no_repeat_ngram_size': -1, 
+                'num_beams': max(1, args.num_beams // len(token_constraint)),
+                'no_repeat_ngram_size': -1,
                 'top_p': top_p,
                 'token_constraint': token_constraint
             }
             print(request_json)
-                        # ---------- Start debug
+            # ---------- Start debug
             if args.debug_frontend:
                 if not DO_TOKEN_RANGE:
                     beam_results = {}
@@ -381,12 +381,12 @@ def query():
                             'beam_outputs_sequences_scores': [-i]
                         } for i in range(1, 16+1)
                     ]
-                    
+
                     # beam_results['beam_outputs_texts'] = ["X"*i for i in range(1, 16+1)]
                     # beam_results['beam_outputs_sequences_scores'] = [-i for i in range(1, 16+1)]
                     sleep(5)
-                
-            # ---------- End debug 
+
+            # ---------- End debug
             else:
                 # https://stackoverflow.com/questions/9110593/asynchronous-requests-with-python-requests
                 #  Query local models
@@ -447,56 +447,61 @@ def query():
                     print("Retrieved Token Range:", retrieved_token_ranges)
                 else:
                     print("Correct Token Range!")
-                
+
                 # Sort the results
                 def sort_results(text_list, score_A_list, score_B_list):
-                    ranked_text = []
-                    ranked_score = []
+                    ranked_texts = []
+                    ranked_scores = []
                     # We implement a simpler verison, that simply first multply the scores. Since it's logprob, we add it
-                    score_list = [a+b for a,b in zip(score_A_list, score_B_list)]
+                    score_B_threshold = sorted(score_B_list, reverse=True)[len(score_B_list) // 2]
+                    score_list = [a+b if b > score_B_threshold else a-1e10 for a,b in zip(score_A_list, score_B_list)]
                     # Get the rank
                     score_rank = (-np.array(score_list)).argsort()
                     for idx in score_rank:
-                        ranked_text.append(text_list[idx])
-                        ranked_score.append(score_list[idx])
-                    return ranked_text, ranked_score
+                        ranked_texts.append(text_list[idx])
+                        ranked_scores.append(score_list[idx])
+                    return ranked_texts, ranked_scores
+
                 # Now we use a list to store it
                 beam_results_list = []
                 for token_range_str, result_data_per_token_range in all_token_range_output.items():
                     # For each token length, we sort it
-                    ranked_text, ranked_score = sort_results(
+                    ranked_texts, ranked_scores = sort_results(
                         result_data_per_token_range['beam_outputs_texts'],
                         result_data_per_token_range['beam_outputs_sequences_scores_generation'],
                         result_data_per_token_range['beam_outputs_sequences_scores_suffix'],
                     )
                     beam_results_list.append({
-                        'beam_outputs_texts' : ranked_text,
-                        'beam_outputs_sequences_scores' : ranked_score,
+                        'beam_outputs_texts' : ranked_texts,
+                        'beam_outputs_sequences_scores' : ranked_scores,
                     })
+
             suggestions_list = []
             for beam_results in beam_results_list:
                 suggestions = []
-                
+
                 # Only apply stop rules when we're doing continuation or writing. (suffix, selected is '')
                 if (not (suffix.strip() == '' and selected.strip() == '')) and (not DO_TOKEN_RANGE):
                     stop_rules = []
-                    
+
                 for choice_text, log_prob in zip(beam_results['beam_outputs_texts'], beam_results['beam_outputs_sequences_scores']):
                     suggestion = parse_suggestion(
                         choice_text,
                         results['after_prompt'],
-                        stop_rules = []
+                        stop_rules=[]
                     )
-                    probability = (np.e**log_prob) * 100
-                    suggestions.append((suggestion, probability, engine))
+                    suggestions.append((suggestion, log_prob, engine))
+
                 suggestions_list.append(suggestions)
+
         except Exception as e:
             results['status'] = FAILURE
             results['message'] = str(e)
             print(e)
             SESSIONS[session_id]['lock'].release()
             return jsonify(results)
-    # Got the results from GPT or local models, in suggestions_list        
+
+    # Got the results from GPT or local models, in suggestions_list
     original_suggestions = []
     filtered_suggestions = []
     counts = {
@@ -504,7 +509,8 @@ def query():
         'duplicate_cnt': 0,
         'bad_cnt': 0
     }
-    for suggestions, trunc_len in zip(suggestions_list, trunc_len_list):
+
+    for group_id, suggestions in enumerate(suggestions_list):
         # Always return original model outputs
         original_suggestions_ = []
         for index, (suggestion, probability, source) in enumerate(suggestions):
@@ -522,48 +528,83 @@ def query():
             filtered_suggestions,
             blocklist,
         )
-        filtered_suggestions_= custom_filter_suggestions(
+
+        filtered_suggestions_ = custom_filter_suggestions(
             filtered_suggestions_,
             suffix = suffix
         )
+
         # Get the num_return_sequence of highest prob sequence here
-        filtered_suggestions_ = filtered_suggestions_[:trunc_len]
+        # filtered_suggestions_ = filtered_suggestions_[:trunc_len]
         # Combine the results
         original_suggestions += original_suggestions_
-        filtered_suggestions += filtered_suggestions_
         counts['empty_cnt'] += counts_['empty_cnt']
         counts['duplicate_cnt'] += counts_['duplicate_cnt']
         counts['bad_cnt'] += counts_['bad_cnt']
 
-    # print("Suggestions: ", json.dumps(filtered_suggestions, indent = 4))
-    # random.shuffle(filtered_suggestions)
+        for suggestion in filtered_suggestions_:
+            filtered_suggestions.append({
+                'text': suggestion[0],
+                'probability': suggestion[1],
+                'source': suggestion[2],
+                'group_id': group_id,
+                'selected': False,
+            })
 
+    filtered_suggestions = sorted(filtered_suggestions, reverse=True, key=lambda x: x['probability'])
+
+    def compute_similarity(text_a, text_b):
+        alpha_only = lambda x: ''.join([c for c in x if c.isalpha()])
+        text_a, text_b = text_a.lower().split(), text_b.lower().split()
+        text_a = [alpha_only(word) for word in text_a]
+        text_b = [alpha_only(word) for word in text_b]
+        lcs = np.zeros((len(text_a)+1, len(text_b)+1))
+        for i in range(1, len(text_a)+1):
+            for j in range(1, len(text_b)+1):
+                if text_a[i-1] == text_b[j-1]:
+                    lcs[i, j] = lcs[i - 1, j - 1] + 1
+                else:
+                    lcs[i, j] = max(lcs[i - 1, j], lcs[i, j - 1])
+        return lcs[len(text_a), len(text_b)] / min(len(text_a), len(text_b))
+
+    selected_texts = []
+    similarity_threshold = args.similarity_threshold
+    trunc_len_list_cnt = [0] * len(trunc_len_list)
+    # take iterations to select suggestions, prioritizing diversity
+    while True:
+        for suggestion in filtered_suggestions:
+            group_id = suggestion['group_id']
+            if suggestion['selected']:
+                continue
+            if len(selected_texts) != 0 and any([compute_similarity(ref, suggestion['text']) > similarity_threshold for ref in selected_texts]):
+                continue
+            if trunc_len_list_cnt[group_id] >= trunc_len_list[group_id]:
+                continue
+            suggestion['selected'] = True
+            trunc_len_list_cnt[group_id] += 1
+            selected_texts.append(suggestion['text'])
+        if trunc_len_list_cnt == trunc_len_list:
+            break
+        similarity_threshold += 0.1
+        # print(trunc_len_list_cnt)
+        # print(similarity_threshold)
+
+    # gather result
+    original_suggestions_sorted = original_suggestions
     suggestions_with_probabilities = []
-    for index, (suggestion, probability, source) in enumerate(filtered_suggestions):
-        suggestions_with_probabilities.append({
-            'index': index,
-            'original': suggestion,
-            'trimmed': suggestion.strip(),
-            'probability': probability,
-            'source': source,
-        })
-    # Sort agiain
-    original_suggestions_sorted = []
-    suggestions_with_probabilities_sorted = []
-    if not DO_TOKEN_RANGE:
-        rank_idx_list = np.array([ - choice['probability'] for choice in suggestions_with_probabilities]).argsort().tolist()
-        # We switch the first two, because the default choice in frontend is the 2nd, which should have the hightest prob
-        if len(rank_idx_list) > 1:
-            tmp = rank_idx_list[0]
-            rank_idx_list[0] = rank_idx_list[1]
-            rank_idx_list[1] = tmp
-        for i, rank_idx in enumerate(rank_idx_list):
-            original_suggestions_sorted.append(original_suggestions[rank_idx])
-            suggestions_with_probabilities_sorted.append(suggestions_with_probabilities[rank_idx])
-    else:
-        original_suggestions_sorted = original_suggestions
-        suggestions_with_probabilities_sorted = suggestions_with_probabilities
-    print("Suggestions: ", json.dumps(suggestions_with_probabilities_sorted, indent = 4))
+    for index, suggestion in enumerate(filtered_suggestions):
+        if suggestion['selected']:
+            suggestions_with_probabilities.append({
+                'index': index,
+                'original': suggestion['text'],
+                'trimmed': suggestion['text'].strip(),
+                'probability': suggestion['probability'],
+                'source': suggestion['source'],
+            })
+    suggestions_with_probabilities_sorted = sorted(suggestions_with_probabilities, reverse=True, key=lambda x: x['probability'])
+    suggestions_with_probabilities_sorted[0], suggestions_with_probabilities_sorted[1] = suggestions_with_probabilities_sorted[1], suggestions_with_probabilities_sorted[0]
+
+    print("Suggestions: ", json.dumps(suggestions_with_probabilities_sorted, indent=4))
     results['status'] = SUCCESS
     results['original_suggestions'] = original_suggestions_sorted
     results['suggestions_with_probabilities'] = suggestions_with_probabilities_sorted
@@ -655,6 +696,7 @@ if __name__ == '__main__':
                         help="Specify the local model port file. In this file, each line should have a number, which is the port. Should be specify together with local_model_server_port")
     # Optional arguments
     parser.add_argument('--num_beams', type=int, default = 64, help = "The beam size or the number of returned samples for local model.")
+    parser.add_argument('--similarity_threshold', type=float, default=0.3, help="The similarity threshold for controlling diversity, range between 0 and 1, the lower the value the more diverse.")
     parser.add_argument('--replay_dir', type=str, default='../logs')
 
     parser.add_argument('--debug', action='store_true')
@@ -680,7 +722,7 @@ if __name__ == '__main__':
     if args.use_local_model:
         assert len(local_model_server_list) > 0, "ERROR: args.use_local_model is set to True, but there're no item in local_model_server_list"
         print("Use Local Model Servers: ", local_model_server_list)
-    
+
     # Create a project directory to store logs
     global config_dir, proj_dir
     config_dir = args.config_dir
