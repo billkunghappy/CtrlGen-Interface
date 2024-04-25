@@ -132,8 +132,13 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
 
     if suffix.strip() != '':
         # Cannot strip the suffix at the start. Need to keep the \n
-        suffix = suffix.lstrip(' ')
-        suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:] # Strip the right side
+        # suffix = suffix.lstrip(' ')
+        suffix = suffix.lstrip()
+        if suffix[0].isalpha():
+            suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:] # Strip the right side
+        else: # if the first character of suffix is not a character (i.e. punctuation)
+            suffix_tokens = tokenizer.encode('\n' + suffix.rstrip(' '))[2:]
+
         if suffix_tokens[0] == 29871:
             suffix_tokens = suffix_tokens[1:]
         suffix_tokens = tuple(suffix_tokens + [2])
