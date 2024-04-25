@@ -20,7 +20,6 @@ function InitSlider(){
         "step" : 1,
         "value" : [10, 20], // Default value
         "onInput": (value, userInteraction) => {
-            console.log(value);
             // Set the first thumbs max value, and the second thums min value
             $('#ctrl-length-slider > input:eq(0)').attr({'max': value[1]});
             $('#ctrl-length-slider > input:eq(1)').attr({'min': value[0]});

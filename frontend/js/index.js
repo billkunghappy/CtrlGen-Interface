@@ -51,6 +51,12 @@ $(function() {
     // Hide the control panel
     $('#control').toggleClass('slideright');
   }
+  // Control panel click listener. Blur the editor when control panel is clicked
+  document.getElementById("control").onmousedown = function () {
+    console.log("User moused down");
+    blurEditor();
+    return true; // Not needed, as long as you don't return false
+  };
   // Initialize the sliders
   InitSlider();
   // Initiallize listener for reset-btn

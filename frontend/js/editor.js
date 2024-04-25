@@ -89,14 +89,22 @@ function trackTextChangesByMachineOnly(){
 
   });
 }
-
+var range_before_blur = null;
 function trackSelectionChange(){
   // NOTE It's "silenced" when coincide with text-change
   quill.on('selection-change', function(range, oldRange, source) {
-    if (range === null) {
-      return;  // click outside of the editor
+    if (range_before_blur){ // if this var is not null, the editor was previously blurred
+      // restore the selection
+      quill.setSelection(range_before_blur);
+    } else if (range === null) { // click outside of the editor
+      // If click outside and the system is not currently showing the suggestions, we do this. If system has the suggestions, it will auto restore.
+      if (!checkDropdownShown()){
+        // store the select range before blur, next time when focus, restore it
+        range_before_blur = oldRange;
+      }
+      return;  
     } else if (source == 'silent'){
-      return;
+      console.log("Quill silent selection");
     } else {
       eventName = null;
       eventSource = sourceToEventSource(source);
@@ -121,7 +129,18 @@ function trackSelectionChange(){
 
       logEvent(eventName, eventSource, textDelta='', cursorRange=range);
     }
+    // restore this var
+    range_before_blur = null;
   });
+}
+
+function blurEditor(){
+  // This fuction is specifically for some control panel components that does not blur when modifying, such as length control
+  // For those, we detect changes, and blur it by this function
+  if (!range_before_blur) { // currently focus
+    quill.blur();
+    console.log("Blur the quill editor");
+  }
 }
 
 function setupEditorHumanOnly() {
@@ -296,6 +315,40 @@ function setCursor(index, length = 0) {
   prevCursorIndex = index;
 }
 
+function prepareForRewrite(cursor_index, cursor_length) {
+  // When query for rewrite operation, we need to store some info to restore the original text and selection in case the user ESC. 
+  if (cursor_length > 0){
+    // Store the to rewrite part
+    update_to_rewrite(cursor_index, cursor_length);
+    original_to_rewrite_text = quill.getText(cursor_index, cursor_length);
+    original_to_rewrite_selection = [cursor_index, cursor_length];
+  }
+  else{
+    reset_to_rewrite();
+  }
+}
+
+function abortRewrite(abort) {
+  // When abort the query for rewrite operation, we restore the original text and selection
+  if (abort){
+    // Restore the text
+    if (original_to_rewrite_selection){
+      // if exist, use this instead, because when restoring rewriting, the current cursor can become the end of selection position because of the race condition with blur restore selection function.
+      // If the blur restore happens first, then getting the current cursor will get the end of selected text position
+      quill.insertText(original_to_rewrite_selection[0], original_to_rewrite_text);
+      // Restore the selection for rewriting
+      quill.setSelection(original_to_rewrite_selection[0], original_to_rewrite_selection[1]);
+    }
+    else {
+      quill.insertText(quill.getSelection().index, original_to_rewrite_text);
+    }
+    
+  }
+  // Reset the value
+  original_to_rewrite_text = "";
+  original_to_rewrite_selection = null;
+}
+
 function setCursorAtTheEnd() {
   // If it's not triggerd by user's text insertion, and instead by api's
   // forced selection change, then it is saved as part of logs by selection-change
@@ -354,6 +407,7 @@ function remove_all_format(){
 var to_rewrite_curIndex = -1;
 var to_rewrite_length = -1;
 var original_to_rewrite_text = "";
+var original_to_rewrite_selection = null;
 
 
 function reset_to_rewrite(){

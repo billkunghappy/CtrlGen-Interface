@@ -130,7 +130,7 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
             prefix_tokens = prefix_tokens[:-1]
     prefix_tokens = tuple(prefix_tokens)
 
-    if suffix != '':
+    if suffix.strip() != '':
         # Cannot strip the suffix at the start. Need to keep the \n
         suffix = suffix.lstrip(' ')
         suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:] # Strip the right side

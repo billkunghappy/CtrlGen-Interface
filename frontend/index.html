@@ -80,10 +80,15 @@
         <span id="shortcuts-close-btn" class="close"><i class="fas fa-times"></i></span><br/>
       </div>
       <div>
-        <span class="key" style="margin-right: 5px;">Tab</span> Get suggestions</br>
-        <span class="key">Shift</span> + <span class="key" style="margin-right: 5px;">Tab</span> Reopen suggestions<br/>
+        <span class="key" style="margin-right: 5px;">Tab</span> Get suggestions<br/>
+        <!-- <span class="key">Shift</span> + <span class="key" style="margin-right: 5px;">Tab</span> Reopen suggestions<br/> -->
         <span class="key">↑</span><span class="key" style="margin-right: 5px;">↓</span> Navigate suggestion<br/>
-        <span class="key" style="margin-right: 5px;">Enter</span> Select suggestion
+        <span class="key" style="margin-right: 5px;">Enter</span> Select suggestion<br/>
+        <span class="key" style="margin-right: 5px;">Esc</span> Reject suggestion<br/>
+          <span class="key" style="margin-right: 5px;">Tab</span>
+          >> <span class="key" style="margin-right: 5px;">Esc</span>
+          >> <span class="key" style="margin-right: 5px;">Tab</span> Upgrade suggestions<br/>
+        <span class="key">Shift</span> + <span class="key" style="margin-right: 5px;">Tab</span> Reopen suggestions
       </div>
     </div>
 
@@ -224,9 +229,11 @@
           <!-- Soft Control -->
           <div class="card card-body">
             <div class="form-group row">
-              <label for="ctrl-instruct" class="col-sm-4 col-form-label">Instruction</label>
-              <div class="col-sm-8 ml-auto mr-0">
-                <input type="text" id="ctrl-instruct" class="form-control", placeholder="Continue the text _____ .">
+              <label for="ctrl-instruct" class="col-sm-8 col-form-label">Instruction</label>
+            </div>
+            <div class="form-group row">
+              <div class="col-sm-12 ml-auto mr-0">
+                <textarea type="text" id="ctrl-instruct" class="form-control" placeholder="Continue the text _____ ."></textarea>
               </div>
             </div>
           </div>

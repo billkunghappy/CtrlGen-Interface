@@ -72,17 +72,18 @@ function close_dropdown(click_item = false, abort = false){
     // Adter the dropdown is closed, enable the editor and set the cursor
     quill.enable();
     quill.focus();
-    if (abort){
-      quill.insertText(quill.getSelection().index, original_to_rewrite_text);
-    }
-    original_to_rewrite_text = "";
+    abortRewrite(abort);
     // quill.setSelection(currentIndex);
   }
   
 }
 
+function checkDropdownShown(){
+  return $('#frontend-overlay').length && !$('#frontend-overlay').hasClass('hidden');
+}
+
 function hideDropdownMenu(source, abort = false) {
-  if ($('#frontend-overlay').length && !$('#frontend-overlay').hasClass('hidden')){
+  if (checkDropdownShown()){
     $('#frontend-overlay').addClass('hidden');
     $('.sudo-hover').removeClass('sudo-hover');  // NOTE Do not delete; error
     if (abort){

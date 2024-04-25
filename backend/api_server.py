@@ -293,7 +293,7 @@ def query():
                 engine=engine,
                 prompt=prompt,
                 # suffix=suffix,
-                n=n,
+                n=args.num_beams,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
@@ -402,8 +402,10 @@ def query():
                 all_token_range_output = {}
                 print("start checking")
                 if check_background_cache(PRED_CACHE, content):
+                    UseBackgroundCache = True
                     print("Exist and is using background cache. Skip model generation...")
                 else:
+                    UseBackgroundCache = False
                     print("Doesn't exist background cache...")
                     # Running Async
                     print(f"Sending Post Request to Servers:", local_model_server_list)
@@ -438,6 +440,8 @@ def query():
                     content = content,
                     prediction = all_token_range_output
                 )
+                for token_range_str, token_range_output in all_token_range_output.items():
+                    print(f"{token_range_str} : {len(token_range_output['beam_outputs_texts'])}")
                 # Check
                 retrieved_token_ranges = list(all_token_range_output.keys())
                 requested_token_ranges = [json.dumps(token_range) for token_range in token_constraint]
@@ -527,6 +531,7 @@ def query():
             # prev_suggestions,
             filtered_suggestions,
             blocklist,
+            remove_duplicates = False
         )
 
         filtered_suggestions_ = custom_filter_suggestions(
@@ -565,18 +570,31 @@ def query():
                     lcs[i, j] = lcs[i - 1, j - 1] + 1
                 else:
                     lcs[i, j] = max(lcs[i - 1, j], lcs[i, j - 1])
-        return lcs[len(text_a), len(text_b)] / min(len(text_a), len(text_b))
+        similarity =  lcs[len(text_a), len(text_b)] / min(len(text_a), len(text_b))
+        if similarity > 1 or similarity < 0:
+            print(f"Error occurred at compute_similarity. The compute score should be between [0, 1] but instead get {similarity}")
+            similarity = max(similarity, 0)
+            similarity = min(similarity, 1)
+        return similarity
 
     selected_texts = []
     similarity_threshold = args.similarity_threshold
     trunc_len_list_cnt = [0] * len(trunc_len_list)
-    # take iterations to select suggestions, prioritizing diversity
+    # take iterations to select suggestions, prioritizing diversity. 
+    if selected.strip() != "": # Rewriting, Set a high similarity threshold
+        similarity_threshold = 0.8
+        print("Doing rewriting, don't apply diversity filtering.")
+    # Get a list of suffix that we also don't want to have too much overlap
+    additional_ref = [sentence.strip() for sentence in suffix.split(". ") if sentence.strip() != ''][:3]
+    if UseBackgroundCache:
+        # Further add the prev suggestions in the ref list
+        additional_ref += [suggestion['original'] for suggestion in prev_suggestions]
     while True:
         for suggestion in filtered_suggestions:
             group_id = suggestion['group_id']
             if suggestion['selected']:
                 continue
-            if len(selected_texts) != 0 and any([compute_similarity(ref, suggestion['text']) > similarity_threshold for ref in selected_texts]):
+            if len(selected_texts) != 0 and any([compute_similarity(ref, suggestion['text']) >= similarity_threshold for ref in (selected_texts + additional_ref)]):
                 continue
             if trunc_len_list_cnt[group_id] >= trunc_len_list[group_id]:
                 continue
@@ -586,9 +604,23 @@ def query():
         if trunc_len_list_cnt == trunc_len_list:
             break
         similarity_threshold += 0.1
+        if similarity_threshold > 1.09:
+            break
         # print(trunc_len_list_cnt)
         # print(similarity_threshold)
-
+    
+    # Add None suggestions to the list if not empty, to make sure the interface to show properly
+    num_selected_suggestions = sum([1 for suggestion in filtered_suggestions if suggestion['selected']])
+    if num_selected_suggestions > 0 and num_selected_suggestions < n:
+        filtered_suggestions += [{
+            'selected': True,
+            'text': '[No Suggestions]',
+            'probability': -100000000000,
+            'source': 'None'
+        }] * (n - num_selected_suggestions)
+        print(f"Not enough suggestions (got {n - num_selected_suggestions} but need {n})... Fill in empty suggestions.")
+    
+    
     # gather result
     original_suggestions_sorted = original_suggestions
     suggestions_with_probabilities = []
@@ -602,7 +634,8 @@ def query():
                 'source': suggestion['source'],
             })
     suggestions_with_probabilities_sorted = sorted(suggestions_with_probabilities, reverse=True, key=lambda x: x['probability'])
-    suggestions_with_probabilities_sorted[0], suggestions_with_probabilities_sorted[1] = suggestions_with_probabilities_sorted[1], suggestions_with_probabilities_sorted[0]
+    if len(suggestions_with_probabilities_sorted) > 1:
+        suggestions_with_probabilities_sorted[0], suggestions_with_probabilities_sorted[1] = suggestions_with_probabilities_sorted[1], suggestions_with_probabilities_sorted[0]
 
     print("Suggestions: ", json.dumps(suggestions_with_probabilities_sorted, indent=4))
     results['status'] = SUCCESS

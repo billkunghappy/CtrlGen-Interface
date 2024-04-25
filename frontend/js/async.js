@@ -394,14 +394,7 @@ function queryGPT3() {
   let range = quill.getSelection();
   const exampleText = exampleActualText;
   const data = getDataForQuery(doc, exampleText, range.index, range.length);
-  if (range.length > 0){
-    // Store the to rewrite part
-    update_to_rewrite(range.index, range.length);
-    original_to_rewrite_text = quill.getText(range.index, range.length);
-  }
-  else{
-    reset_to_rewrite();
-  }
+  prepareForRewrite(range.index, range.length);
 
   $.ajax({
     url: serverURL + '/api/query',
@@ -435,6 +428,10 @@ function queryGPT3() {
                     + '- generated same suggestions as before (' + data.counts.duplicate_cnt + ')\n'
                     + '- generated suggestions that contained banned words (' + data.counts.bad_cnt + ')\n';
           console.log(msg);
+          console.log(data.suggestions_with_probabilities);
+          if (data.suggestions_with_probabilities.length < 3){
+            alert("Got less than three suggestions (got " + data.suggestions_with_probabilities.length.toString() + " ), which might cause bug to show the interface...");
+          }
           addSuggestionsToDropdown(data.suggestions_with_probabilities);
           showDropdownMenu('api');
         } else {

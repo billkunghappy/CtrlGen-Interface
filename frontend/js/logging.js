@@ -153,14 +153,7 @@ function showLog(replayLog) {
         // Spin icon to indicate loading
         showLoadingSignal();
         let range = quill.getSelection();
-        if (range.length > 0){
-          // Store the to rewrite part
-          update_to_rewrite(range.index, range.length);
-          original_to_rewrite_text = quill.getText(range.index, range.length);
-        }
-        else{
-          reset_to_rewrite();
-        }
+        prepareForRewrite(range.index, range.length);
         break;
       case EventName.SUGGESTION_OPEN:
         hideLoadingSignal();
