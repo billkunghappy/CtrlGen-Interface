@@ -212,7 +212,7 @@ def prompt_(input_json):
                 output_id = real_prefix_tokens + output_id + [29889]
             output_text = tokenizer.decode(output_id, skip_special_tokens=True)
             output_text = output_text[len(RawPrefix):] # Remove prefix again
-            if len(Suffix) > 0 and Suffix[0] != ' ':
+            if len(Suffix) > 0 and (not Suffix[0] in [' ', '.', ',', '!', '?', ';']):
                 output_text = output_text + ' '
             outputs_texts.append(output_text)
 

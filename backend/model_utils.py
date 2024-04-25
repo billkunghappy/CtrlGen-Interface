@@ -3,6 +3,7 @@ from transformers import LogitsProcessor
 import torch
 import json
 from string import Template
+import string
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
     # if llama_insertion is true, use Insertion for the insertion prompt
@@ -132,13 +133,13 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
 
     if suffix.strip() != '':
         # Cannot strip the suffix at the start. Need to keep the \n
-        # suffix = suffix.lstrip(' ')
-        suffix = suffix.lstrip()
-        if suffix[0].isalpha():
-            suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:] # Strip the right side
-        else: # if the first character of suffix is not a character (i.e. punctuation)
-            suffix_tokens = tokenizer.encode('\n' + suffix.rstrip(' '))[2:]
-
+        suffix = suffix.lstrip(' ')
+        if suffix[0] in string.punctuation:
+            # if the first character of suffix is a character (i.e. punctuation), we need to add \n to before that to get the correct token_id
+            # Remove 29871 + 13, which have two tokens
+            suffix_tokens = tokenizer.encode('\n' + suffix.rstrip(' '))[3:]
+        else: 
+            suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:]
         if suffix_tokens[0] == 29871:
             suffix_tokens = suffix_tokens[1:]
         suffix_tokens = tuple(suffix_tokens + [2])

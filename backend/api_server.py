@@ -172,6 +172,7 @@ def query():
     session_id = content['session_id']
     domain = content['domain']
     prev_suggestions = content['suggestions']
+    UseBackgroundCache = False
     
     # This is an async function within the same session
     print(f"Try to acquire key for session: {session_id}")
@@ -405,7 +406,6 @@ def query():
                     UseBackgroundCache = True
                     print("Exist and is using background cache. Skip model generation...")
                 else:
-                    UseBackgroundCache = False
                     print("Doesn't exist background cache...")
                     # Running Async
                     print(f"Sending Post Request to Servers:", local_model_server_list)
