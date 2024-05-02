@@ -50,6 +50,37 @@ def matmul_a_logb(A, B):
     return C
 
 
+@torch.compile
+def distribute_state_weights(E2D, y):
+    device = y.device
+    _, hidden_states = y.shape
+    return y[E2D[:, None],
+            torch.arange(0, hidden_states, device=device)[None, :]]
+
+
+@torch.compile
+def aggregate_edge_weights(E2S, y, num_states):
+    device = y.device
+    _, hidden_states = y.shape
+    num_edges = E2S.shape[0]
+    E2S_ = E2S[:, None].expand(-1, hidden_states)
+
+    y_out = torch.zeros(num_states, hidden_states, device=device)
+
+    y_out_max = -1e30 * torch.ones(num_states, hidden_states, device=device)
+    y_out_max.scatter_reduce_(0, E2S_, y, reduce='amax')
+    y_max = y_out_max[E2S[:, None],
+        torch.arange(0, hidden_states, device=device)[None, :]]
+
+    y = torch.exp(y - y_max)
+    y_out.scatter_reduce_(0, E2S_, y, reduce='sum')
+    y_out.log_()
+    y_out.nan_to_num(neginf=-1e30)
+    y_out += y_out_max
+
+    return y_out
+
+
 def ends_at(prefix, suffix,
     offset_min, D_cache, dfa_model):
     ans = []
@@ -145,6 +176,8 @@ class HMM(nn.Module):
         T_mask = dfa_model.T_mask
         VE_mask = dfa_model.VE_mask
         EV_mask = dfa_model.EV_mask
+        E2Src, E2Dst = dfa_model.E2Src, dfa_model.E2Dst
+
         T_weights = matmul_a_logb(T_mask, torch.transpose(beta, 0, 1)) # num_transitions * hidden_states
         T_weights.nan_to_num_(neginf=-1e30)
 
@@ -158,10 +191,18 @@ class HMM(nn.Module):
         C = torch.empty(max_tokens+1, num_states, hidden_states, device=device)
         C[0, :, :] = y
         for t in range(1, max_tokens+1):
-            y = matmul_a_logb(EV_mask, y) # num_transitions * hidden_states
-            y.nan_to_num_(neginf=-1e30)
-            y = matmul_a_logb(VE_mask, T_weights + y) # num_states * hidden_states
-            y.nan_to_num_(neginf=-1e30)
+            ############## orginial code ##############
+            # y = matmul_a_logb(EV_mask, y) # num_transitions * hidden_states
+            # y.nan_to_num_(neginf=-1e30)
+            # y = matmul_a_logb(VE_mask, T_weights + y) # num_states * hidden_states
+            # y.nan_to_num_(neginf=-1e30)
+            ############## orginial code ##############
+
+            ############## current code ##############
+            y = distribute_state_weights(E2Dst, y) # num_transitions * hidden_states
+            y = aggregate_edge_weights(E2Src, T_weights + y, num_states=num_states) # num_states * hidden_states
+            ############## current code ##############
+
             y = matmul_loga_b(y, alpha_exp_t) # num_states * hidden_states
             C[t, :, :] = y
 
