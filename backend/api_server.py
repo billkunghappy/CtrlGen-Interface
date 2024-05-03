@@ -27,7 +27,7 @@ from helper import (
     print_verbose, print_current_sessions,
     get_uuid, retrieve_log_paths,
     append_session_to_file, get_context_window_size,
-    save_log_to_jsonl, compute_stats, get_last_text_from_log, get_config_for_log,
+    save_log_to_jsonl, compute_stats, get_last_text_from_log, get_config_for_log, save_doc_to_txt,
 )
 from parsing import (
     parse_prompt, parse_suggestion, parse_probability,
@@ -129,12 +129,15 @@ def end_session():
     content = request.json
     session_id = content['sessionId']
     log = content['logs']
+    doc = content['end_doc']
 
     path = os.path.join(proj_dir, session_id) + '.jsonl'
+    txt_path = os.path.join(proj_txt_dir, session_id) + '.txt'
 
     results = {}
     results['path'] = path
     try:
+        save_doc_to_txt(txt_path, doc)
         save_log_to_jsonl(path, log)
         results['status'] = SUCCESS
     except Exception as e:
@@ -262,13 +265,14 @@ def query():
     else:
         print(f"ERROR! word control type {word_control_type} does not exist!")
     # Keyword & Banword Constraints
-    keyword_constraint = [k.strip() for k in content['keyword'].split(";") if k.strip() != ""]
-    banword_constraint = [k.strip() for k in content['banword'].split(";") if k.strip() != ""]
-
+    keyword_constraint = [k.strip() for k in content['keyword'].split("\n") if k.strip() != ""]
+    banword_constraint = [k.strip() for k in content['banword'].split("\n") if k.strip() != ""]
+    print("Keyword Constraint: ", keyword_constraint)
     # Instruct
     instruction = content['instruct'].strip()
     if instruction != "":
         # We need to add a space at the start of the instruction, and remove the last punctuations
+        instruction = instruction[0].lower() + instruction[1:]
         if instruction[-1] in string.punctuation:
             instruction = instruction[:-1]
         instruction = " " + instruction
@@ -294,7 +298,7 @@ def query():
                 engine=engine,
                 prompt=prompt,
                 # suffix=suffix,
-                n=args.num_beams,
+                n=args.num_beams*4,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
@@ -303,6 +307,7 @@ def query():
                 logprobs=10,
                 stop=stop_sequence,
             )
+            sleep(1.5)
             suggestions = []
             for choice in response['choices']:
                 print(f"#{choice.text}#")
@@ -760,10 +765,13 @@ if __name__ == '__main__':
     global config_dir, proj_dir
     config_dir = args.config_dir
     proj_dir = os.path.join(args.log_dir, args.proj_name)
+    proj_txt_dir = os.path.join(args.log_dir, args.proj_name + "_txt")
     if not os.path.exists(args.log_dir):
         os.mkdir(args.log_dir)
     if not os.path.exists(proj_dir):
         os.mkdir(proj_dir)
+    if not os.path.exists(proj_txt_dir):
+        os.mkdir(proj_txt_dir)
 
     # Create a text file for storing metadata
     global metadata_path

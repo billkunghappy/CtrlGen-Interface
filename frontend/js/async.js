@@ -12,9 +12,10 @@ async function startSession(accessCode) {
       sessionId = session.session_id;
       example = session.example;
       exampleActualText = session.example_text; 
-      promptText = session.prompt_text;
+      // promptText = session.prompt_text;
 
-      setPrompt(promptText);
+      // setPrompt(promptText);
+      setPrompt();
       startTimer(session.session_length);
       promptLength = promptText.length;  // Number of characters
     
@@ -54,7 +55,8 @@ async function startSession(accessCode) {
 }
 
 async function endSession() {
-  const results = await wwai.api.endSession(sessionId, logs);
+  var end_doc = quill.getText(0);
+  const results = await wwai.api.endSession(sessionId, logs, end_doc);
   const verificationCode = results['verification_code'];
 
   if (engine == 'local') {

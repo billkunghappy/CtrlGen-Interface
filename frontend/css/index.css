@@ -432,6 +432,32 @@ div:has(>#ctrl-token-spinner){
   margin-right: -5px;
 }
 
+.ctrl-panel-icon{
+  height: 1vw;
+  width: 1vw;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 1.4vw;
+  margin-top: -0.4vw;
+  margin-right: 0.6vw;
+}
+
+.icon-apply{
+  color: green;
+}
+
+.control .icon-apply{
+  display: block!important;
+}
+
+.icon-remove{
+  color: gray;
+}
+
+.control .icon-remove{
+  display: none!important;
+}
+
 .ctrl-token-icon{
   height: 40px;
   text-align: center;
@@ -500,4 +526,16 @@ div:has(>#ctrl-token-spinner){
   position: absolute;
   /* bottom: 10%; */
   left: 0px;
+}
+
+.form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+  opacity: 0.4; /* Firefox */
+}
+
+.form-control:-ms-input-placeholder { /* Internet Explorer 10-11 */
+  opacity: 0.4;
+}
+
+.form-control::-ms-input-placeholder { /* Microsoft Edge */
+  opacity: 0.4;
 }
