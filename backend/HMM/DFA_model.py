@@ -82,6 +82,7 @@ def DFA_remove_unreachable_states(A):
     reachable_states = set()
     Q = Queue()
     Q.put(initial_state)
+    reachable_states.add(initial_state)
     while not Q.empty():
         u = Q.get()
         for v in G[u]:
@@ -91,8 +92,8 @@ def DFA_remove_unreachable_states(A):
 
     edges_ = [edge for edge in edges
         if (edge[0] in reachable_states and edge[1] in reachable_states)]
-    accept_states_ = [state for state in accept_states
-        if state in reachable_states]
+    accept_states_ = set([state for state in accept_states
+        if state in reachable_states])
 
     return {
         'edges': edges_,
@@ -321,7 +322,7 @@ class EndSentenceBuilder:
         vocab_set = set([x for x in range(0, vocab_size)])
         # token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
         token_ids = [29889]
-        
+
         others_set = vocab_set.difference(set(token_ids))
 
         edges = [
@@ -480,6 +481,8 @@ class DFAModel:
         VE_mask = torch.zeros(state_cnt, edge_cnt, device=device)
         EV_mask = torch.zeros(edge_cnt, state_cnt, device=device)
         T_mask = torch.zeros(edge_cnt, vocab_size, device=device)
+        E2Src = torch.tensor([0] * edge_cnt, device=device)
+        E2Dst = torch.tensor([0] * edge_cnt, device=device)
         for e in edges:
             u, v, transition = e    # transition should be a set of tokens
             u_idx, v_idx = state2idx[u], state2idx[v]
@@ -487,6 +490,8 @@ class DFAModel:
             VE_mask[u_idx, edge_idx] = 1.0
             EV_mask[edge_idx, v_idx] = 1.0
             T_mask[edge_idx, list(transition)] = 1.0
+            E2Src[edge_idx] = u_idx
+            E2Dst[edge_idx] = v_idx
 
             if u_idx not in G:
                 G[u_idx] = []
@@ -496,6 +501,8 @@ class DFAModel:
         self.VE_mask = VE_mask
         self.EV_mask = EV_mask
         self.T_mask = T_mask
+        self.E2Src = E2Src
+        self.E2Dst = E2Dst
         self.num_states = state_cnt
         self.initial_state = state2idx[initial_state]
         self.accept_states = set([state2idx[x] for x in accept_states])
