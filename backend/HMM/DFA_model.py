@@ -1,5 +1,13 @@
 import torch
 from queue import Queue
+import numpy as np
+
+
+def set2npset(A, n):
+    res = np.zeros((n,), dtype=bool)
+    for x in A:
+        res[x] = 1
+    return res
 
 
 def edges2G(edges):
@@ -30,7 +38,7 @@ def edges2dict(edges):
     return res
 
 
-def DFA_merge_states(A):
+def DFA_merge_undistinguishable_states(A):
     edges = A['edges']
     initial_state = A['initial_state']
     accept_states = A['accept_states']
@@ -38,32 +46,7 @@ def DFA_merge_states(A):
     G = edges2G(edges)
     duplicate_states = set([u for u in G if len(G[u]) == 1 and G[u][0] == u])
 
-    state2parent = {}
-    if len(duplicate_states) > 0:
-        rep_accept, rep_dead = None, None
-        for state in duplicate_states:
-            if state in accept_states:
-                if rep_accept is None:
-                    rep_accept = state
-                state2parent[state] = rep_accept
-            else:
-                if rep_dead is None:
-                    rep_dead = state
-                state2parent[state] = rep_dead
-
-    edges_ = []
-    for edge in edges:
-        u, v, transition = edge
-        u = u if u not in state2parent else state2parent[u]
-        v = v if v not in state2parent else state2parent[v]
-        edges_.append((u, v, transition))
-
-    initial_state_ = initial_state if initial_state not in state2parent else state2parent[initial_state]
-
-    accept_states_ = set()
-    for state in accept_states:
-        state = state if state not in state2parent else state2parent[state]
-        accept_states_.add(state)
+    #TODO
 
     return {
         'edges': edges_,
@@ -87,7 +70,7 @@ def DFA_remove_unreachable_states(A):
         u = Q.get()
         for v in G[u]:
             if v not in reachable_states:
-                reachable_states.add(v)
+                reachable_states.add(u)
                 Q.put(v)
 
     edges_ = [edge for edge in edges
@@ -104,7 +87,7 @@ def DFA_remove_unreachable_states(A):
 
 def DFA_minimize(A):
     A = DFA_remove_unreachable_states(A)
-    # A = DFA_merge_states(A)
+    # A = DFA_merge_undistinguishable_states(A)
     return A
 
 
@@ -152,8 +135,8 @@ def DFA_prod_binary(A, B, mode='intersection'):
             ua, ub = u
             va, vb = v
             if (ua, va) in EA and (ub, vb) in EB:
-                transition = EA[(ua, va)].intersection(EB[(ub, vb)])
-                if len(transition) > 0:
+                transition = EA[(ua, va)] & EB[(ub, vb)]
+                if transition.any():
                     edges_AB.append((u, v, transition))
 
     initial_state_AB = (A['initial_state'], B['initial_state'])
@@ -181,7 +164,7 @@ def DFA_prod(dfa_graphs, mode='intersection'):
 
 class PatternBuilder:
     def __init__(self, vocab_size):
-        self.vocab_set = set([x for x in range(0, vocab_size)])
+        self.vocab_size = vocab_size
 
 
     def build(self, pat):
@@ -207,29 +190,31 @@ class PatternBuilder:
             return tuple(lps)
 
         lps = compute_lps(pat)
-        candidate_tokens = set(pat)
+
+        pat_tokens_set = set(pat)
+        candidate_tokens = set2npset(pat_tokens_set, self.vocab_size)
 
         E = {}
         for u in range(0, len(pat)):
-            for token in candidate_tokens:
+            for token in pat_tokens_set:
                 if token == pat[u]:
                     v = u + 1
                 else:
                     v = 0 if u == 0 else compute_lps_i(pat, lps, lps[u-1], token)
 
                 if (u, v) not in E:
-                    E[(u, v)] = set()
-                E[(u, v)].add(token)
+                    E[(u, v)] = np.zeros((self.vocab_size,), dtype=bool) # bitarray(self.vocab_size)
+                E[(u, v)][token] = 1
 
             if (u, 0) not in E:
-                E[(u, 0)] = set()
-            E[(u, 0)].update(self.vocab_set.difference(candidate_tokens))
+                E[(u, 0)] = np.zeros((self.vocab_size,), dtype=bool) # bitarray(self.vocab_size)
+            E[(u, 0)] |= ~candidate_tokens
 
-        E[(len(pat), len(pat))] = self.vocab_set
+        E[(len(pat), len(pat))] = np.ones((self.vocab_size,), dtype=bool) # ~bitarray(self.vocab_size)
 
         edges = []
         for e, transition in E.items():
-            if transition != []:
+            if transition.any():
                 u, v = e
                 edges.append((u, v, transition))
 
@@ -275,58 +260,17 @@ class BanphraseBuilder:
         return dfa_graph
 
 
-# Generated text must be end with . " ? or !
-# class EndSentenceBuilder:
-#     def __init__(self, tokenizer, vocab_size,
-#             periods=['.','\"', '?', '!'], eos_token_id=2):
-
-#         vocab_set = set([x for x in range(0, vocab_size)])
-#         token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
-#         others_set = vocab_set.difference(set(token_ids))
-
-#         edges = []
-#         for idx, token_id in enumerate(token_ids):
-#             edges.append((-1, idx, set([token_id])))
-
-#         for idx, _ in enumerate(token_ids):
-#             edges.append((idx, -2, set([eos_token_id])))
-
-#         for idx, _ in enumerate(token_ids):
-#             for jdx, token_id in enumerate(token_ids):
-#                 edges.append((idx, jdx, set([token_id])))
-
-#         for idx, _ in enumerate(token_ids):
-#             edges.append((idx, -1, others_set))
-#         edges.append((-1, -1, others_set))
-
-#         edges.append((-2, -2, vocab_set))
-
-#         initial_state = -1
-#         accept_states = set([-2])
-
-#         self.dfa_graph = {
-#             'edges': edges,
-#             'initial_state': initial_state,
-#             'accept_states': accept_states,
-#         }
-
-
-#     def build(self):
-#         return self.dfa_graph
-
-
 class EndSentenceBuilder:
     def __init__(self, tokenizer, vocab_size,
             periods=['.'], eos_token_id=2):
 
-        vocab_set = set([x for x in range(0, vocab_size)])
+        vocab_set = np.ones((self.vocab_size,), dtype=bool) # ~bitarray(vocab_size)
         # token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
-        token_ids = [29889]
-
-        others_set = vocab_set.difference(set(token_ids))
+        token_ids = set2npset([29889], vocab_size)
+        others_set = ~token_ids
 
         edges = [
-            (0, 1, set(token_ids)),
+            (0, 1, token_ids),
             (0, 0, others_set),
             (1, 1, vocab_set)
         ]
@@ -350,7 +294,7 @@ class TrivialBuilder:
     def __init__(self, tokenizer, vocab_size,
             eos_token_id=2):
 
-        vocab_set = set([x for x in range(0, vocab_size)])
+        vocab_set = np.ones((vocab_size,), dtype=bool) # set([x for x in range(0, vocab_size)])
 
         self.dfa_graph = {
             'edges': [(0, 1, vocab_set),
@@ -369,8 +313,9 @@ class EOSBuilder:
     def __init__(self, tokenizer, vocab_size,
             eos_token_id=2):
 
-        vocab_set = set([x for x in range(0, vocab_size)])
-        eos, others = set([eos_token_id]), vocab_set.difference(set([eos_token_id]))
+        vocab_set = np.ones((self.vocab_size,), dtype=bool) # ~bitarray(vocab_size)
+        eos = set2npset([eos_token_id], vocab_size)
+        others = ~eos
 
         self.dfa_graph = {
             'edges': [(0, 1, eos),
@@ -389,33 +334,27 @@ class EOSBuilder:
 
 class WordCountBuilder:
     def __init__(self, tokenizer, vocab_size, sep=[' ', '\n', ',', '.', ':', ';', '\"', '/']):
-        vocab00_list, vocab01_list, vocab10_list, vocab11_list = [], [], [], []
+        vocab00, vocab01, vocab10, vocab11 = [np.zeros((vocab_size,), dtype=bool) for _ in range(0, 4)]
         for token_id in range(3, vocab_size):
             token = tokenizer.decode([13, token_id])[1:]
             if token[0] in sep:
                 if any([c.isalpha() or c.isdigit() for c in token]):
-                    vocab11_list.append(token_id)
+                    vocab11[token_id] = 1 # vocab11_list.append(token_id)
                 else:
-                    vocab10_list.append(token_id)
+                    vocab10[token_id] = 1 # vocab10_list.append(token_id)
             else:
                 if any([c.isalpha() or c.isdigit() for c in token]):
-                    vocab01_list.append(token_id)
+                    vocab01[token_id] = 1 # vocab01_list.append(token_id)
                 else:
-                    vocab00_list.append(token_id)
-        vocab00_list.extend([0,1,2])
+                    vocab00[token_id] = 1 # vocab00_list.append(token_id)
+        vocab00[:3] = 1 # vocab00_list.extend([0,1,2])
 
-        vocab0x = vocab00_list + vocab01_list
-        vocabx0 = vocab00_list + vocab10_list
-        vocabx1 = vocab01_list + vocab11_list
-        vocab10 = vocab10_list
-        vocab11 = vocab11_list
-
-        self.vocab0x = set(vocab0x)
-        self.vocabx0 = set(vocabx0)
-        self.vocabx1 = set(vocabx1)
-        self.vocab10 = set(vocab10)
-        self.vocab11 = set(vocab11)
-        self.vocab_set = set([token for token in range(0, vocab_size)])
+        self.vocab0x = vocab00 | vocab01
+        self.vocabx0 = vocab00 | vocab10
+        self.vocabx1 = vocab01 | vocab11        
+        self.vocab10 = vocab10
+        self.vocab11 = vocab11
+        self.vocab_set = np.ones((vocab_size,), dtype=bool)
 
 
     def build(self, min_word_count, max_word_count):
@@ -478,18 +417,18 @@ class DFAModel:
                 exit(1)
 
         G = {}
-        VE_mask = torch.zeros(state_cnt, edge_cnt, device=device)
-        EV_mask = torch.zeros(edge_cnt, state_cnt, device=device)
-        T_mask = torch.zeros(edge_cnt, vocab_size, device=device)
-        E2Src = torch.tensor([0] * edge_cnt, device=device)
-        E2Dst = torch.tensor([0] * edge_cnt, device=device)
+        VE_mask = torch.zeros(state_cnt, edge_cnt)
+        EV_mask = torch.zeros(edge_cnt, state_cnt)
+        T_mask = torch.zeros(edge_cnt, vocab_size)
+        E2Src = torch.tensor([0] * edge_cnt)
+        E2Dst = torch.tensor([0] * edge_cnt)
         for e in edges:
-            u, v, transition = e    # transition should be a set of tokens
+            u, v, transition = e    # transition should be a bitset of tokens
             u_idx, v_idx = state2idx[u], state2idx[v]
             edge_idx = edge2idx[(u_idx, v_idx)]
             VE_mask[u_idx, edge_idx] = 1.0
             EV_mask[edge_idx, v_idx] = 1.0
-            T_mask[edge_idx, list(transition)] = 1.0
+            T_mask[edge_idx, torch.from_numpy(transition)] = 1.0
             E2Src[edge_idx] = u_idx
             E2Dst[edge_idx] = v_idx
 
@@ -498,11 +437,11 @@ class DFAModel:
             G[u_idx].append((v_idx, transition))
 
         self.G = G
-        self.VE_mask = VE_mask
-        self.EV_mask = EV_mask
-        self.T_mask = T_mask
-        self.E2Src = E2Src
-        self.E2Dst = E2Dst
+        self.VE_mask = VE_mask.to(device)
+        self.EV_mask = EV_mask.to(device)
+        self.T_mask = T_mask.to(device)
+        self.E2Src = E2Src.to(device)
+        self.E2Dst = E2Dst.to(device)
         self.num_states = state_cnt
         self.initial_state = state2idx[initial_state]
         self.accept_states = set([state2idx[x] for x in accept_states])
@@ -511,7 +450,7 @@ class DFAModel:
     def next_state(self, state, token):
         for e in self.G[state]:
             v, transition_set = e
-            if token in transition_set:
+            if transition_set[token] == 1:
                 return v
         print('ERROR: no valid transition!')
         exit(1)
@@ -519,72 +458,3 @@ class DFAModel:
 
     def is_accept(self, state):
         return state in self.accept_states
-
-
-# class KeyphraseBuilder:
-#     def __init__(self, tokenizer, vocab_size):
-#         self.tokenizer = tokenizer
-#         self.vocab_set = set([x for x in range(0, vocab_size)])
-#         self.vocab_size = vocab_size
-
-
-#     def build(self, keyphrases):
-#         tokenizer = self.tokenizer
-#         vocab_size = self.vocab_size
-#         keyphrase_ids = [tuple(tokenizer.encode(x)[1:]) for x in keyphrases]
-
-#         def gen_states(A):
-#             if len(A) == 1:
-#                 return [(x,) for x in range(0, A[0]+1)]
-#             res_ = gen_states(A[1:])
-#             res = [(x,) + y for x in range(0, A[0]+1) for y in res_]
-#             return res
-
-#         def next_state(state, token):
-#             new_state = []
-#             for x, keyphrase in zip(state, keyphrase_ids):
-#                 if x < len(keyphrase):
-#                     new_state.append(x + 1 if keyphrase[x] == token else 0)
-#                 else:
-#                     new_state.append(x)
-#             return tuple(new_state)
-
-#         states = gen_states([len(x) for x in keyphrase_ids])
-
-#         E = {}
-#         for u in states:
-#             for v in states:
-#                 E[(u, v)] = []
-
-#         for u in states:
-#             candidate_tokens = set()
-#             for x, phrase in zip(u, keyphrase_ids):
-#                 if x < len(phrase):
-#                     candidate_tokens.add(phrase[x])
-#             for token in candidate_tokens:
-#                 v = next_state(u, token)
-#                 E[(u, v)].append(token)
-
-#             v = ()
-#             for x, phrase in zip(u, keyphrase_ids):
-#                 if x < len(phrase):
-#                     v = v + (0,)
-#                 else:
-#                     v = v + (x,)
-
-#             E[(u, v)].extend(list(self.vocab_set.difference(candidate_tokens)))
-
-#         edges = []
-#         for e, transition in E.items():
-#             if transition != []:
-#                 u, v = e
-#                 edges.append((u, v, transition))
-
-#         initial_state = tuple([0] * len(keyphrase_ids))
-#         accept_states = [tuple([len(x) for x in keyphrase_ids])]
-
-#         return DFA_minimize({
-#             'edges': edges,
-#             'initial_state': initial_state,
-#             'accept_states': accept_states,
-#         })
