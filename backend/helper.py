@@ -106,6 +106,10 @@ def save_log_to_jsonl(path, log):
             json.dump(entry, f)
             f.write('\n')
 
+def save_doc_to_txt(path, doc):
+    with open(path, 'w') as f:  # Overwrite existing file
+        f.write(doc)
+
 
 def compute_stats(log):
     event_names = []

@@ -96,9 +96,15 @@ function setCtrl(
   // $("#ctrl-model option[value='"+ model_list[0] + "']").attr("selected","selected");
 }
 
-function setPrompt(prompt){
-  setText(prompt);
-  setCursorAtTheEnd();
+function setPrompt(){
+  let urlString = window.location.href;
+  let url = new URL(urlString);
+  let prompt = url.searchParams.get("prompt");
+  if (prompt && eval_prompt_dict.hasOwnProperty(prompt)){
+    setText(eval_prompt_dict[prompt]);
+    setCursorAtTheEnd();
+    console.log("Init prompt template: [" + prompt + "].");
+  }
 
   // Log initial state
   logEvent(EventName.SYSTEM_INITIALIZE, EventSource.API);

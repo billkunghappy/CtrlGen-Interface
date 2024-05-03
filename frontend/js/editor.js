@@ -101,6 +101,8 @@ function trackSelectionChange(){
       if (!checkDropdownShown()){
         // store the select range before blur, next time when focus, restore it
         range_before_blur = oldRange;
+        // var a = 1;
+        console.log("Blur");
       }
       return;  
     } else if (source == 'silent'){

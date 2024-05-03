@@ -107,7 +107,12 @@ function selectDropdownItem(suggestion){
   remove_all_format();
   reset_to_rewrite();
   // Also call reset 
-  resetHMMCtrl();
+  try {
+    resetHMMCtrl();
+  } catch ({ name, message }) {
+    console.log(name);
+    console.log(message);
+  }
   // Do not empty for metaphor generation
   if (domain != 'metaphor'){
     emptyDropdownMenu();

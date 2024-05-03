@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Quill Editor -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom -->
     <link rel="stylesheet" href="./css/animation.css"/>
     <link rel="stylesheet" href="./css/dropdown.css"/>
@@ -41,6 +41,7 @@
     <script src="./js/async.js" defer></script>
     <script src="./js/slider.js" defer></script>
     <script src="./js/control_panel.js" defer></script>
+    <script src="./js/eval_prompt.js" defer></script>
     <script src="./js/index.js" defer></script>
 
   </head>
@@ -185,16 +186,20 @@
           <!-- Our Control -->
           <hr class="mt-2 mb-3" id="sep-control" style="display: none;"/>
           <div class="card card-body">
+            <i class="bi bi-x-circle ctrl-panel-icon ctrl-token-status icon-remove" id="ctrl-icon-remove"></i>
+            <i class="bi bi-check-circle ctrl-panel-icon ctrl-token-status icon-apply" id="ctrl-icon-apply" style="display: none;"></i>
             <div class="form-group row">
-              <label for="ctrl-keyword" class="col-sm-8 col-form-label">Keyphrases</label>
+              <label for="ctrl-keyword" class="col-sm-12 col-form-label">I want the following phrases to appear:</label>
             </div>
             <div class="form-group row">
               <div class="col-sm-12 ml-auto mr-0">
-                <textarea type="text" id="ctrl-keyword" class="form-control" placeholder="Keyphrases A;&#10;Keyphrases B"></textarea>
+                <textarea type="text" id="ctrl-keyword" class="form-control" placeholder="evil dragon&#10;happily enjoy&#10;On a cold and gloomy day"></textarea>
               </div>
             </div>
           </div>
           <div class="card card-body" style="display: none;">
+            <i class="bi bi-x-circle ctrl-panel-icon ctrl-token-status icon-remove" id="ctrl-icon-remove"></i>
+            <i class="bi bi-check-circle ctrl-panel-icon ctrl-token-status icon-apply" id="ctrl-icon-apply" style="display: none;"></i>
             <div class="form-group row">
               <label for="ctrl-banword" class="col-sm-6 col-form-label">Banned Keywords</label>
               <div class="col-sm-6 ml-auto mr-0">
@@ -204,10 +209,12 @@
           </div>
           <!-- Length Control -->
           <div class="card card-body">
+            <i class="bi bi-x-circle ctrl-panel-icon ctrl-token-status icon-remove" id="ctrl-icon-remove"></i>
+            <i class="bi bi-check-circle ctrl-panel-icon ctrl-token-status icon-apply" id="ctrl-icon-apply" style="display: none;"></i>
             <div class="form-group">
               <div class="row">
-                <label for="ctrl-length_unit" class="col-sm-6 col-form-label">Length</label>
-                <div class="col-sm-6 ml-auto mr-0">
+                <label for="ctrl-length_unit" class="col-sm-6 col-form-label">Length of suggestions</label>
+                <div class="col-sm-5 ml-auto mr-0">
                   <select id="ctrl-length_unit" class="form-select form-control">
                     <option value="none" selected>None</option>
                     <option value="token">Token</option>
@@ -228,12 +235,14 @@
           </div>
           <!-- Soft Control -->
           <div class="card card-body">
+            <i class="bi bi-x-circle ctrl-panel-icon ctrl-token-status icon-remove" id="ctrl-icon-remove"></i>
+            <i class="bi bi-check-circle ctrl-panel-icon ctrl-token-status icon-apply" id="ctrl-icon-apply" style="display: none;"></i>
             <div class="form-group row">
-              <label for="ctrl-instruct" class="col-sm-8 col-form-label">Instruction</label>
+              <label for="ctrl-instruct" class="col-sm-12 col-form-label">Instruction: Continue the given text _____ .</label>
             </div>
             <div class="form-group row">
               <div class="col-sm-12 ml-auto mr-0">
-                <textarea type="text" id="ctrl-instruct" class="form-control" placeholder="Continue the text _____ ."></textarea>
+                <textarea type="text" id="ctrl-instruct" class="form-control" placeholder="in a horror style&#10;by describing the color of the scene"></textarea>
               </div>
             </div>
           </div>
@@ -301,7 +310,8 @@
     <!-- <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script> -->
 
     <!-- Font Awesome -->
-    <script src="https://kit.fontawesome.com/ec39425d5e.js" crossorigin="anonymous"></script>
+    <!-- <script src="https://kit.fontawesome.com/ec39425d5e.js" crossorigin="anonymous"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/fontawesome.min.js" integrity="sha512-1M9vud0lqoXACA9QaA8IY8k1VR2dMJ2Qmqzt9pN2AH7eQHWpNsxBpaayV0kKkUsF7FLVQ2sA2SSc8w5VOm7/mg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <!-- Include the Quill library -->
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
