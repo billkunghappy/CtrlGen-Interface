@@ -70,7 +70,7 @@ def DFA_remove_unreachable_states(A):
         u = Q.get()
         for v in G[u]:
             if v not in reachable_states:
-                reachable_states.add(u)
+                reachable_states.add(v)
                 Q.put(v)
 
     edges_ = [edge for edge in edges
