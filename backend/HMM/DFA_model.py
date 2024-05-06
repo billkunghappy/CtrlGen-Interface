@@ -264,7 +264,7 @@ class EndSentenceBuilder:
     def __init__(self, tokenizer, vocab_size,
             periods=['.'], eos_token_id=2):
 
-        vocab_set = np.ones((self.vocab_size,), dtype=bool) # ~bitarray(vocab_size)
+        vocab_set = np.ones((vocab_size,), dtype=bool) # ~bitarray(vocab_size)
         # token_ids = [tokenizer.encode(f'\n{period}')[3] for period in set(periods)]
         token_ids = set2npset([29889], vocab_size)
         others_set = ~token_ids

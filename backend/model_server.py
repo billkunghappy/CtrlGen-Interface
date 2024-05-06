@@ -64,7 +64,7 @@ def prompt_(input_json):
 
     # Get prefix, suffix tokens for HMM
     prefix_tokens, suffix_tokens = get_prefix_suffix_tokens_for_HMM(Prefix, Suffix, tokenizer)
-
+    suffix_tokens = suffix_tokens[:args.suffix_cap]
     # Construct DFA graph
     dfa_graphs = []
     if len(banword_constraint) != 0:
@@ -86,13 +86,19 @@ def prompt_(input_json):
         dfa_model = DFAModel(trivial_builder.build())
 
     # Get input_ids
+    if args.llama_only:
+        # Enforce the keyword and word length control with soft control
+        if len(keyword_constraint) != 0:
+            Instruct += f" by including the following keywords: {' ,'.join(keyword_constraint)}"
+        if len(word_constraint) != 0:
+            Instruct = f" within {word_constraint[0]} to {word_constraint[1]} words"
     prompt_tokens = encode_with_messages_format(
         Prefix = Prefix,
         SoftControl = Instruct,
         Prior = Prior,
         Suffix = Suffix,
         tokenizer = tokenizer,
-        operation = Operation
+        operation = Operation,
     )
 
     input_ids = torch.tensor([prompt_tokens] * (num_beams*num_token_ranges), device=device)
@@ -114,13 +120,13 @@ def prompt_(input_json):
 
         current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
             token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
-
-        if current_hmm_status != hmm_status:
-            hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
-                token_constraint, dfa_model)
-            hmm_status = current_hmm_status
-        else:
-            print('cache hit!')
+        if not args.llama_only:
+            if current_hmm_status != hmm_status:
+                hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
+                    token_constraint, dfa_model)
+                hmm_status = current_hmm_status
+            else:
+                print('cache hit!')
 
         model_kwargs = {
             'past_key_values': past_key_values,
@@ -140,7 +146,12 @@ def prompt_(input_json):
 
         stopping_criteria = StoppingCriteriaList([
             MaxLengthCriteria(max_length=len(prompt_tokens)+max_tokens)])
-        logits_processor = LogitsProcessorList([
+        if args.llama_only: 
+            # Use only llama
+            print("-------------------- Only use llama without using HMM --------------------")
+            logits_processor = LogitsProcessorList([])
+        else:            
+            logits_processor = LogitsProcessorList([
             ConstraintLogitsProcessor(hmm_model, hmm_config, temperature=temperature)])
         if no_repeat_ngram_size > 0:
             logits_processor.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
@@ -229,7 +240,16 @@ def prompt_(input_json):
             })
 
         print(results)
-
+    if args.eval:
+        # Clear cache everytime
+        del kv_cache
+        kv_cache = {}
+        del hmm_status
+        hmm_status = None
+        del hmm_model.cache
+        hmm_model.cache = {}
+        torch.cuda.empty_cache()
+    
     return results
 
 
@@ -250,6 +270,8 @@ def init():
     arg_parser.add_argument('--llama_insertion', action='store_true', help="If sepecified, provide suffix to the llama model during insertion.")
     arg_parser.add_argument('--suffix_no_repeat_ngram_size', default=0, type=int)
     arg_parser.add_argument('--rank_without_prompt', action='store_true')
+    arg_parser.add_argument('--eval', action='store_true', help="If sepecified, clear cache at the end of every request for evaluation. This can make the server slower.")
+    arg_parser.add_argument('--llama_only', action='store_true', help="If specified, do not use the HMM at all. Will use soft control for the wordlen and keyword control.")
     arg_parser.add_argument('--debug', action='store_true')
 
     args = arg_parser.parse_args()

@@ -26,7 +26,9 @@ printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
             --device cuda \
             --hmm_model_path $HMM_MODEL_PATH \
             --llama_model_path $LLAMA_MODEL_PATH \
-            --suffix_cap 32 \
+            --eval \
+            --llama_only \
+            --llama_insertion \
             &
     done
     wait

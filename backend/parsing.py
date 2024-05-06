@@ -35,7 +35,7 @@ def parse_prompt(text, max_tokens, context_window_size):
 
 
 def parse_probability(
-    logprobs
+    logprob
 ):
     """
     Parameters:
@@ -84,7 +84,7 @@ def parse_probability(
         "text": "\n\n"
         }
     """
-    logprob = sum(logprobs['token_logprobs'])
+    # logprob = sum(logprobs['token_logprobs'])
     prob = np.e ** logprob
     return prob * 100
 

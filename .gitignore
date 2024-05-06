@@ -6,3 +6,5 @@ frontend/js/config.js
 frontend/start_frontend.sh
 backend/start_backend.sh
 backend/start_model.sh
+backend/*/*.json
+backend/*/*.csv

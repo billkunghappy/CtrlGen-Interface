@@ -6,7 +6,7 @@ import os
 import gc
 import shutil
 import random
-import openai
+from openai import OpenAI
 import warnings
 import numpy as np
 import json
@@ -294,29 +294,57 @@ def query():
             # If you want to use chat model, change here to `openai.chat.Completion.create`
             print("--------- GPT Prompt ----------")
             print(prompt)
-            response = openai.Completion.create(
-                engine=engine,
-                prompt=prompt,
-                # suffix=suffix,
-                n=args.num_beams*4,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                logprobs=10,
-                stop=stop_sequence,
-            )
+            if "instruct" in engine: #completion model
+                print("------ Using Completion for GPT -------")
+                response = client.completions.create(
+                    model=engine,
+                    prompt=prompt,
+                    # suffix=suffix,
+                    n=args.num_beams*4,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop_sequence,
+                    logprobs = 10
+                )
+            else: #chat model
+                print("------ Using Chat Completion for GPT -------")
+                response = client.chat.completions.create(
+                    model=engine,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful writing assistant."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    n=args.num_beams*4,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop_sequence,
+                    logprobs = True
+                )
             sleep(1.5)
+            all_choices = []
+            for choice in response.choices:
+                if "instruct" in engine:
+                    all_choices.append({
+                        "text": choice.text,
+                        "logprobs": sum(choice.logprobs.token_logprobs)
+                    })
+                else:
+                    all_choices.append({
+                        "text": choice.message.content,
+                        "logprobs": sum([choice.logprob for choice in choice.logprobs.content])
+                    })
+                
             suggestions = []
-            for choice in response['choices']:
-                print(f"#{choice.text}#")
+            for choice in all_choices:
+                # print(f"#{choice['text']}#")
                 suggestion = parse_suggestion(
-                    choice.text,
+                    choice["text"],
                     results['after_prompt'],
                     stop_rules
                 )
-                probability = parse_probability(choice.logprobs)
+                probability = parse_probability(choice["logprobs"])
                 suggestions.append((suggestion, probability, engine))
             suggestions_list = [suggestions]
             trunc_len_list = [n]
@@ -783,7 +811,8 @@ if __name__ == '__main__':
     # Read and set API keys
     global api_keys
     api_keys = read_api_keys(config_dir)
-    openai.api_key = api_keys[('openai', 'default')]
+    global client
+    client = OpenAI(api_key= api_keys[('openai', 'default')])
 
     # Read examples (hidden prompts), prompts, and a blocklist
     global examples, prompts, blocklist
