@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from huggingface_hub import PyTorchModelHubMixin
 
 
 torch.set_float32_matmul_precision('high')
@@ -95,36 +96,53 @@ def ends_at(prefix, suffix,
     return ans
 
 
-class HMM(nn.Module):
-    def __init__(self, weights_file,
-        enforce_eos_constraint=False, eos_token_id=2):
+class HMM(nn.Module, PyTorchModelHubMixin):
+    # I directly replace the old __init()__ function to the new one on Ctrl-G github: https://github.com/joshuacnf/Ctrl-G/tree/main
+    # TODO: need to update the hmm model part to the new one.
+    
+    def __init__(self, hidden_states: int, vocab_size: int, eos_token_id: int):
         super().__init__()
 
-        assert(weights_file[-2:] == 'th')
-
-        d = torch.load(weights_file)
-        alpha, beta, gamma = d['alpha'], d['beta'], d['gamma']
-
-        if enforce_eos_constraint:
-            alpha[-1, :] = -1e30
-            alpha[-1, -1] = 0.0
-            beta[:-1, eos_token_id] = -1e30
-            beta[-1, :] = -1e30
-            beta[-1, eos_token_id] = 0.0
-
-        alpha_exp = torch.softmax(alpha, dim=1)
-        beta = torch.log_softmax(beta, dim=1)
-        gamma = torch.log_softmax(gamma, dim=0)
-
-        hidden_states, _ = beta.shape
+        alpha_exp = torch.softmax(torch.randn(hidden_states, hidden_states), dim=1)
+        beta = torch.log_softmax(torch.randn(hidden_states, vocab_size), dim=1)
+        gamma = torch.log_softmax(torch.randn(hidden_states), dim=0)
 
         self.alpha_exp = nn.Parameter(alpha_exp, requires_grad=False)
         self.beta = nn.Parameter(beta, requires_grad=False)
         self.gamma = nn.Parameter(gamma, requires_grad=False)
 
+        self.hidden_states = hidden_states
+        self.vocab_size = vocab_size
+        self.eos_token_id = eos_token_id
         self.dfa_model = None
-
         self.cache = {}
+    
+    # def __init__(self, weights_file, enforce_eos_constraint=False, eos_token_id=2):
+    #     super().__init__()
+        
+    #     d = torch.load(weights_file)
+    #     alpha, beta, gamma = d['alpha'], d['beta'], d['gamma']
+
+    #     if enforce_eos_constraint:
+    #         alpha[-1, :] = -1e30
+    #         alpha[-1, -1] = 0.0
+    #         beta[:-1, eos_token_id] = -1e30
+    #         beta[-1, :] = -1e30
+    #         beta[-1, eos_token_id] = 0.0
+
+    #     alpha_exp = torch.softmax(alpha, dim=1)
+    #     beta = torch.log_softmax(beta, dim=1)
+    #     gamma = torch.log_softmax(gamma, dim=0)
+
+    #     hidden_states, _ = beta.shape
+
+    #     self.alpha_exp = nn.Parameter(alpha_exp, requires_grad=False)
+    #     self.beta = nn.Parameter(beta, requires_grad=False)
+    #     self.gamma = nn.Parameter(gamma, requires_grad=False)
+
+    #     self.dfa_model = None
+
+    #     self.cache = {}
 
 
     def initialize_cache(self, prefix_tokens, suffix_tokens, token_ranges, dfa_model, ignore_prefix=False):

@@ -265,7 +265,7 @@ def init():
     # arg_parser.add_argument('--hmm_batch_size', default=256, type=int)
     arg_parser.add_argument('--hmm_model_path', default=None, type=str)
     arg_parser.add_argument('--llama_model_path', default='gpt2', type=str)
-    arg_parser.add_argument('--suffix_cap', default=10000, type=int)
+    arg_parser.add_argument('--suffix_cap', default=10000, type=int, help="If specified, truncate the suffix to this length.")
     arg_parser.add_argument('--do_beam_search', action='store_true')
     arg_parser.add_argument('--llama_insertion', action='store_true', help="If sepecified, provide suffix to the llama model during insertion.")
     arg_parser.add_argument('--suffix_no_repeat_ngram_size', default=0, type=int)
@@ -294,7 +294,7 @@ def load_models():
         tokenizer = LlamaTokenizer.from_pretrained(args.llama_model_path)
 
         print(f'loading hmm from {args.hmm_model_path} ...')
-        hmm_model = HMM(args.hmm_model_path)
+        hmm_model = HMM.from_pretrained(args.hmm_model_path)
         hmm_model.to(device)
         print(hmm_model.alpha_exp.device)
 
@@ -305,9 +305,8 @@ def load_models():
         word_count_builder = WordCountBuilder(tokenizer, 32000)
         trivial_builder = TrivialBuilder(tokenizer, 32000)
     except Exception as e:
-        print(f"Cannot Load LLamaModel {args.llama_model_path} or HMM Model {args.hmm_model_path} because of the following exception:\n {e}")
-        print("Exit the process...")
-        exit(0)
+        print(f"Cannot Load LLamaModel {args.llama_model_path} or HMM Model {args.hmm_model_path} because of the following exception:\n")
+        raise e
 
 
 if __name__ == '__main__':

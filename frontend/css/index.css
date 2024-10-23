@@ -33,7 +33,7 @@ html, body {
   padding: 20px;
   text-align: center;
   background-color: #31363F;
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
 }
 
 #shortcuts {
@@ -51,7 +51,7 @@ html, body {
   z-index: 100;
   cursor: move;
   box-shadow: rgba(0, 0, 0, 0.2) 1px 2px 3px;
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
 }
 
 #shortcuts-close-btn{
@@ -79,7 +79,7 @@ html, body {
   /* overflow-y: scroll; */
   padding: 1vw;
   font-size: 1vw;
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
   color: #222831;
   transition: 0.6s;
   transition-timing-function: ease-in-out;
@@ -129,7 +129,7 @@ html, body {
   left: 0;
 
   z-index: 1000;
-  font-family: 'PT Sans', sans-serif;
+  /* font-family: 'PT Sans', sans-serif; */
   font-size: 18px;
 
   overflow-y: scroll;
@@ -149,7 +149,7 @@ html, body {
 }
 
 #editor-container {
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
   font-size: 24px;
   height: auto;
 }
@@ -164,7 +164,7 @@ html, body {
   background-color: #f5f5f5;
   text-align: center;
   vertical-align: middle;
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
 }
 
 #robot {
@@ -185,7 +185,7 @@ a {
 }
 
 button {
-  font-family: 'Source Sans Pro', sans-serif;
+  /* font-family: 'Source Sans Pro', sans-serif; */
   font-weight: 300 !important;
 }
 
@@ -498,9 +498,9 @@ div:has(>#ctrl-token-spinner){
 
 #header>h1{
   font-size: 60px;
-  font-weight: 600;
-  font-family: monospace;
-  font-stretch: expanded;
+  /* font-weight: 600; */
+  /* font-family: monospace; */
+  /* font-stretch: expanded; */
   /* width: 100px;
   height: 100%; */
   

@@ -1,31 +1,148 @@
 <div align="center">
 
-<img src="./coauthor.png" width="350px"/>
+<img src="./Ctrl-G-Logo.png" width="350px"/>
 
-**An Open-Source Interface for Human-Language Model (LM) Interaction**
+**Placeholder**
 
 </div>
 
 ## Overview
+This repository contains the code for the interface of interactive text editing using [Ctrl-G](https://billkunghappy.github.io/Ctrl-G/). The interface includes three parts: (1) Frontend interface for interactive text editing, including a control panel; (2) Backend server that preprocess user requests and query the model servers; (3) Model server that host the models for Ctrl-G and generate suggestions.
 
-This repository contains the code for the **interface** of [CoAuthor](https://coauthor.stanford.edu). The interface comes in two parts: (1) the frontend presented to the users for writing and to view replays, and (2) the backend that serves requests from the frontend and queries models to generate suggestions.
+- **Ctrl-G** Paper: 
+[Adaptable Logical Control for Large Language Models](https://arxiv.org/abs/2406.13892)
+([Honghua Zhang](https://web.cs.ucla.edu/~hzhang19/), [Po-Nien Kung](https://billkunghappy.github.io/ponien-kung/), [Masahiro Yoshida](https://github.com/masathehero), [Guy Van den Broeck](https://web.cs.ucla.edu/~guyvdb/), and [Nanyun(Violet) Peng](https://violetpeng.github.io/), Neurips 2024)
 
-For downloading the CoAuthor dataset and replaying its writing sessions, please visit the [website](https://coauthor.stanford.edu) instead.
+### Credits
+This interface is extended from the **interface** of [CoAuthor](https://coauthor.stanford.edu) by [Mina Lee](https://minalee.info/), which already allows interactive text editing with OpenAI models. We suggest you use the [CoAuthor Interface](https://coauthor.stanford.edu) if you're not planning to use the additional features described below.
 
-- Paper: 
-[CoAuthor: Designing a Human-AI Collaborative Writing Dataset for Exploring Language Model Capabilities](https://arxiv.org/abs/2201.06796) ([Mina Lee](https://minalee.info/), [Percy Liang](https://cs.stanford.edu/~pliang/), and [Qian Yang](https://qianyang.co/), CHI 2022)
-- Main contributors of this repository: [Mina Lee](https://minalee.info/) and [Vishakh Padmakumar](https://vishakhpk.github.io/).
-
-If you have any questions, please feel free to reach out to [Mina Lee](https://minalee.info/) at `mnlee@uchicago.edu`.
+**Added Features in Ctrl-G Interface:**
+1. Added control panel for controllable generation.
+2. Allow the host of local model servers.
+3. Allow the backend to query local model servers.
+4. Improved pre-processing/post-processing for getting suggestions.
+5. Allow getting suggestions for rewriting text.
 
 ---
 
 ## Contents
 - [Overview](#overview)
 - [Contents](#contents)
+- [Setup](#Model)
+- [Model](#Model)
 - [Backend](#backend)
 - [Frontend](#frontend)
 - [Advanced Usage](#advanced-usage)
+
+---
+
+## Setup
+
+**1. Clone this Github repository**
+First clone this repository in any directory.
+```
+git clone https://github.com/???
+```
+Inside the `ctrl-g-interface` directory, run the following to install the required packages:
+
+```
+pip install -r requirements.txt
+```
+
+**2. Start all the servers**
+Follow the provided instructions to start the **Model Server**, **Backend Server** and **Frontend Server** sequentially.
+
+---
+
+## Model Server
+The model server is a Flask app that host the local language models to generate suggestions based on reqursts from the backend server. The model server allows multi-gpu inference.
+
+By default, the model server is setup to host [Ctrl-G](https://billkunghappy.github.io/Ctrl-G/), which includes a Llama2 model and an attached HMM for controlled generation. By changing the input arguments, you can easily host any other language models.
+
+**To use the interface with [OpenAI models](https://platform.openai.com/docs/models), you do not need to setup the model server.**
+
+
+
+**1. Prepare local models**
+To try [Ctrl-G](https://billkunghappy.github.io/Ctrl-G/) models, you can download the llama2 models and the attatched HMM from [huggingface](https://huggingface.co/ctrlg). 
+We recommend using these two models:
+```python
+{
+    "base_model": "ctrlg/tulu2-7b_writing-prompts",
+    "hmm_models": "ctrlg/hmm_tulu2-7b_writing-promptss_32768"
+}
+```
+
+This model includes a 7B llama2 models with a HMM, which should be able to run under 40GB GPU memory. More model choices can be refer to [Ctrl-G Training Repo](https://github.com/joshuacnf/Ctrl-G?tab=readme-ov-file).
+
+> Note: You do not need to download them explicitly. You can directly input the name as argument to `model/model_server.py`.
+
+**2. Start the model server**
+Enter the `model` directory.
+```
+cd ctrl-g-interface/model
+```
+**Run the model server with *Single GPU*** by typing the following command:
+```bash
+# Setup arguments. For single GPU, please only provide one GPU index to CUDA argument
+export CUDA=0
+export PORT=8400
+export MODEL="ctrlg/tulu2-7b_writing-prompts"
+export HMM_MODEL="ctrlg/hmm_tulu2-7b_writing-prompts_32768"
+
+# Write the port into `../config/model_ports.txt`.
+# -- Backend server will query the model server based on this txt file.
+printf "%s\n" "${PORT}" > ../config/model_ports.txt
+
+# Start the model server
+CUDA_VISIBLE_DEVICES=${CUDA} python3 model_server.py \
+    --port ${PORT} \
+    --llama_model_path $MODEL \
+    --hmm_model_path $HMM_MODEL \
+    --suffix_cap 32
+```
+
+**Run the model server with *Multiple GPUs*** by typing the following command:
+```bash
+# Setup arguments. For multiple GPU, specify the GPUs in a list. 
+# PORT_START specifies the http port we're using. For n GPUs, we will use the port from PORT_START to PORT_START + n.
+export GPUS=( 0 1 )
+export PORT_START=8400
+export MODEL="ctrlg/tulu2-7b_writing-prompts"
+export HMM_MODEL="ctrlg/hmm_tulu2-7b_writing-prompts_32768"
+
+PORT_LIST=()
+
+# Get the ports for each GPU process
+for GPU in "${GPUS[@]}"; do
+    PORT_LIST+=($((PORT_START + GPU)))
+done
+
+# Write the port into `../config/model_ports.txt`.
+# -- Backend server will query the model server based on this txt file.
+printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
+
+# Setup multiple model servers backend. Each on a GPU.
+(
+    trap 'kill 0' SIGINT;
+    for i in "${!GPUS[@]}"
+    do
+        #Run in background
+        CUDA_VISIBLE_DEVICES=${GPUS[i]} python3 model_server.py \
+            --port ${PORT_LIST[i]} \
+            --llama_model_path $MODEL \
+            --hmm_model_path $HMM_MODEL \
+            --suffix_cap 32 \
+            &
+    done
+    wait
+)
+```
+
+**Additional Arguments**
+**1. `--suffix_cap`:** When inserting in a long document, sometimes the suffix can be very long, which might effect the insertion quality. Specify this argument to truncate it into a specified token length.
+**2. `--llama_only`:** When specified, only use the language model without the attatched HMM. This argument will usually combine with `--llama_insertion`.
+**3. `--llama_insertion`:** When specified, provide the suffix to the language model. For Ctrl-G, since HMM will process the suffix, the language model does not see the suffix.
 
 ---
 
@@ -33,23 +150,36 @@ If you have any questions, please feel free to reach out to [Mina Lee](https://m
 
 The backend is a Flask app that serves requests from users, manages sessions, and stores logs for future replays.
 
-By default, the backend is setup to support [OpenAI models](https://platform.openai.com/docs/models) via OpenAI API. To use other models, you will need to modify the backend to support them.
+The backend is setup to support both local model servers setup by model_server.py and [OpenAI models](https://platform.openai.com/docs/models) via OpenAI API. The backend will query different servers based on **URL Parameters**.
 
-**1. Clone this Github repository**
+**1. Run the server on your local machine or on a server**
 
-Type the following command to clone this repository into a directory of your choice:
-
+Run the server in `./backend` with basic parameters as follows:
 ```
-git clone https://github.com/minggg/coauthor-interface
+python3 api_server.py \
+    --config_dir '../config' \
+    --log_dir ../logs \
+    --proj_name 'ctrl-g' \
+    --port 4567 \
+    --use_local_model \
+    --local_model_server_ip 127.0.0.1 \
+    --local_model_server_port_file ../config/model_ports.txt
+	
 ```
+**Arguments**
+**1. `--port`:** The http port for the backend server. Make sure it does not use the same port as model servers.
+**2. `--use_local_model`:** When specify this, it will allow the backend server to query local models. Otherwise, the backend server can only query OpenAI models.
+**3. `--local_model_server_ip`:** When `--use_local_model` is set, this specify the ip address of the model servers. If the model servers and backend server are setup on the same machine, simply give 127.0.0.1 (localhost).
+**4. `--local_model_server_port_file`:**: When `--use_local_model` is set, this specify the .txt file that includes the ports used by the model servers.
 
-Inside the `coauthor-interface` directory, run the following to install the required packages:
+> Note: If you only want to use the interface with **OpenAI models**, you do not need to specify the `--use_local_model` and its following arguments. However, if you specify this, you can still query the OpenAI models by changing the `URL Parameters` after the backend server starts.
 
-```
-pip install -r requirements.txt
-```
+The backend initializes sessions using access codes that are read from `data/access\_codes.csv`. When you enter the frontend, the access code provided needs to match one of the created codes here.  
+
+The choice of models, examples (prompts that are hidden from users), and prompts (prompts that are shown to users in the text editor) can be specified when you create `data/access\_codes.csv`. 
 
 **2. Add your API key(s) to use OpenAI models**
+If you want to use OpenAI models, you will need to add the API keys.
 
 Create a file `./config/api_keys.csv` and add your API key(s) as follows:
 
@@ -59,23 +189,7 @@ Create a file `./config/api_keys.csv` and add your API key(s) as follows:
 
 Replace the `sk-***************************************` with your OpenAI API key. If you don't have it, you can get one [here](https://openai.com/pricing).
 
-For `host` and `domain`, you can simply use `openai` and `default`. If you want to define a new domain for your experiments and use a specific key for a subset of access codes that are under the domain, see [Advanced Usage](#Advanced-Usage) for more details on setting up new domains.
-
-**3. Run the server on your local machine or on a server**
-
-Run the server in `./backend` with basic parameters as follows:
-```
-python3 api_server.py \
-    --config_dir '../config' \
-    --log_dir ../logs \
-    --port 5555 \
-    --proj_name 'pilot' \
-    --debug
-```
-
-The backend initializes sessions using access codes that are read from `data/access\_codes.csv`. When you enter the frontend, the access code provided needs to match one of the created codes here.  
-
-The choice of models, examples (prompts that are hidden from users), and prompts (prompts that are shown to users in the text editor) can be specified when you create `data/access\_codes.csv`. 
+For `host` and `domain`, you can simply use `openai` and `default`.
 
 ---
 
@@ -91,11 +205,9 @@ To run the frontend on a local machine, run the following command in the `./fron
 python -m http.server 8000
 ```
 
-To run the frontend on a server, you can use a third-party platform such as [Glitch](https://glitch.com/).
-
 **2. Set the server URL**
 
-Update `./frontend/js/config.js` to have the correct URL of the frontend and backend server. For instance, if your server is running on `http://127.0.0.1:5555` and your frontend is running on `http://127.0.0.1:8000` then the following two lines in the config file should look like:
+Update `./frontend/js/config.js` to have the correct URL of the frontend and backend server. For instance, if your ***backend server*** is running on `http://127.0.0.1:5555` and your ***frontend server*** is running on `http://127.0.0.1:8000` then the following two lines in the config file should look like:
 
 ```
 const serverURL = 'http://127.0.0.1:5555'
@@ -132,40 +244,6 @@ http://127.0.0.1:8000/index.html?access_code=demo
 
 ## Advanced Usage
 
-**Access codes**
-
-Each access code is mapped to a set of configurations (e.g. decoding parameters). You can create a new access code by adding a new row to `./config/access_codes.csv`. The following is an example of a row in `./config/access_codes.csv`:
-
-| domain | example | prompt | access_code | session_length | n | max_tokens | temperature | top_p | presence_penalty | frequency_penalty | stop | engine | additional_data |
-| ------ | ------- | ------ | ----------- | -------------- | - | ---------- | ----------- | ----- | ---------------- | ----------------- | ---- | ------ | --------------- |
-| demo | na | na | demo | 0 | 5 | 50 | 0.95 | 1 | 0.5 | 0.5 | . | text-davinci-003 | na |
-
-
-Parameters for experiments
-- `domain`: The domain of the access code. This is used to group access codes together. For instance, you can create a new domain called `story` and add all access codes that are used for story writing to this domain.
-- `example`: The part of a prompt that is hidden from users, designed to contain a set of examples for in-context learning. If you don't want to provide example(s), you can set this to `na`. Otherwise, you can provide multiple examples in `./config/examples` as a text file and refer to it here.
-- `prompt`: The prompt that is shown to users in the text editor. If you don't want to provide a prompt, you can set this to `na`. Otherwise, you can add a prompt in `./config/prompts.tsv` refer to its `prompt_code` here.
-- `access_code`: The access code that users need to enter to access the frontend. Choose a unique access code for each row.
-- `session_length`: The minimum length of a writing session in seconds. After an user has written for this amount of time, the "Save your work" button will be enabled. If you don't want to set the time limit, you can set this to `0`.
-- `additional_data`: Additional data that you want to connect with the session. Unless you have a specific use case, you can set this to `na`.
-
-
-Parameters for OpenAI models (see [here](https://beta.openai.com/docs/api-reference/completions/create) for more details)
-- `engine`: The engine used to generate suggestions (see [here](https://platform.openai.com/docs/models) for the list of supported models).
-- `n`: The number of completions to generate for each prompt.
-- `max_tokens`: The maximum number of tokens to generate in the completion.
-- `temperature`: The temperature of the model. The higher the temperature, the more random the text.
-- `top_p`: An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.
-- `presence_penalty`: Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
-- `frequency_penalty`: Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-- `stop`: Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.
-
-For `stop`, you can additionally use the following options to post-process model outputs:
-- Leave it empty if you want a raw model output (e.g. it may include multiple empty lines).
-- Put `.` if you want to show max one sentence for each suggestion.
-- Put `\n` if you want to show max one paragraph for each suggestion.
-- Use `|` to add multiple stop sequences (e.g. `.|\n|***`). You can have up to four stop sequences.
-
 **Blocklist**
 
 You can block certain words or phrases from being generated by the model by adding them to `./config/blocklist.txt` and setting `--use_blocklist` to be true when running the backend.
@@ -179,4 +257,15 @@ To start the writing assistant, you need to start frontend, backend, and the mod
 And to launch the server with the control panel, you can go to:
 `http://${URL}:${PORT}/index.html?access_code=demo&ctrl=show`
 For example for `pluslab01-a100`, it is
-`http://131.179.88.55:8000/index.html?access_code=demo&ctrl=show`
+`http://131.179.88.55:8000/index.html?access_code=demo&ctrl=show&engine=gpt-3.5-turbo-instruct`
+
+**TODO**
+### FIX:
+1. GPT max `n` is now 128. Current beam size for GPT uses the arg.beam * 4. We might need to fix it to let it be set in a more trivial way.
+2. Current local models has the version error when update transformer version.
+3. The interface error message is quite intrivial. Might need to fix this part.
+
+### Upgrade:
+1. Add an example prompt when the user changed the constraints
+2. Unify the style of the interface
+3. Check the font license
