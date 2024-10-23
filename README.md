@@ -264,6 +264,7 @@ For example for `pluslab01-a100`, it is
 1. GPT max `n` is now 128. Current beam size for GPT uses the arg.beam * 4. We might need to fix it to let it be set in a more trivial way.
 2. Current local models has the version error when update transformer version.
 3. The interface error message is quite intrivial. Might need to fix this part.
+4. Check whether the background query still works
 
 ### Upgrade:
 1. Add an example prompt when the user changed the constraints

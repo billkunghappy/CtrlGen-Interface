@@ -2,7 +2,6 @@ from HMM.hmm_model import *
 from transformers import LogitsProcessor
 import torch
 import json
-from string import Template
 import string
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
@@ -23,56 +22,6 @@ def get_operation(prefix, prior, suffix, llama_insertion = False):
     else: # -prior, -prefix, -suffix
         operation = "Write"
     return operation
-
-# Vector: TypeAlias = list[float]
-# def get_gpt_prompt(prefix, prior, suffix, keyword_constraint: list[str], word_range: list[int], token_range: list[int], instruction: str):
-def get_gpt_prompt(prefix, prior, suffix, keyword_constraint, word_range, token_range, instruction):
-    # Including 3 basic prompts: [Continuation, Insertion, Rewrite]
-    # Also includes 6 types of constraints: [Freeform, Keyword, Wordlength, Tokenlength(Deprecated), Keyword+Wordlength, Keyword+Tokenlength(Deprecated)]
-    # We do not do token constaints in our interface, so the types of constraints will be [Freeform, Keyword, Wordlength, Keyword+Wordlength]
-    prompt_templates = json.load(open("Prompt_Templates.json", "r"))
-    # First decide the basic operations.
-    have_prior = prior.strip() != ""
-    have_suffix = suffix.strip() != ""
-    if have_prior: # +prior, +-prefix, +-suffix
-        operation = "Rewrite"
-    elif have_suffix:  # -prior, +-prefix, +suffix
-        operation = "Insertion"
-    else: # -prior, +prefix, -suffix
-        operation = "Continuation"
-    # Check the constraints
-    constraints = []
-    if keyword_constraint != []:
-        constraints += ["Keyword"]
-    if len(word_range) > 0:
-        constraints += ["Wordlength"]
-    else:
-        word_range = ["", ""] # For later formatting
-        # If not word constraints, see if use token constraints
-        if len(token_range) > 0:
-            constraints += ["Tokenlength"]
-    if not ("Tokenlength" in constraints):
-        # Reset token range
-        token_range = ["", ""]
-
-    constraints_str = "+".join(constraints)
-    if constraints_str == "": # no constraints:
-        constraints_str = "Freeform"
-    print(f"Operation: {operation}, constraints_str: {constraints_str}")
-    GPT_prompt_template = Template(prompt_templates[operation][constraints_str])
-    # Format the prompt
-    GPT_prompt = GPT_prompt_template.safe_substitute(
-        keyword = ", ".join(keyword_constraint),
-        word_range_0 = word_range[0],
-        word_range_1 = word_range[1],
-        token_range_0 = token_range[0],
-        token_range_1 = token_range[1],
-        prefix = prefix,
-        prior = prior,
-        suffix = suffix,
-        instruction = instruction
-    )
-    return GPT_prompt
 
 
 
@@ -185,78 +134,6 @@ def get_sequence_scores(llama_model, output_ids,
 
     return scores1, scores2
 
-def update_prediction_cache(CACHE, content, prediction, is_background):
-    CACHE[content['session_id']] = {
-        "content": content,
-        "prediction": prediction,
-        "is_background": is_background,
-    }
-
-def merge_predictions(dict_1, dict_2):
-    # each arg is a Dict[Dict[List]]
-    original_item_num = 0
-    merged_item_num = 0
-    merged_dict = json.loads(json.dumps(dict_1)) # Copy
-    for key in dict_1.keys(): # Dict[Dict[List]]
-        for key_key in dict_1[key]: # Dict[List]
-            if key_key == "beam_outputs_texts":
-                original_item_num += len(merged_dict[key][key_key])
-            merged_dict[key][key_key] += dict_2[key][key_key] # Merge the list
-            if key_key == "beam_outputs_texts":
-                merged_item_num += len(merged_dict[key][key_key])
-    print(f"Merged the predictions from len: {original_item_num} to len: {merged_item_num}")
-    return merged_dict
-
-def check_have_cache(CACHE, content):
-    content = json.loads(json.dumps(content))
-    # Ignore these two keys
-    content.pop("suggestions", None)
-    content.pop("background_query", None)
-    
-    session_id = content['session_id']
-    EXIST_CACHE = False
-    if session_id in CACHE:
-        CACHE[session_id]['content'].pop("suggestions", None)
-        CACHE[session_id]['content'].pop("background_query", None)
-        if CACHE[session_id]['content'] == content:
-            EXIST_CACHE = True
-    return session_id, EXIST_CACHE
-
-def check_background_cache(CACHE, content):
-    # Check this before really getting the prediction. If exist cache with is_background == True, skip the prediction
-    is_background = "background_query" in content
-    
-    session_id, EXIST_CACHE = check_have_cache(CACHE, content)
-    
-    # only when currently it's not background query and content are same, we direclty use the cache stored by previous background query
-    if EXIST_CACHE and (not is_background) and CACHE[session_id]['is_background']:
-        # Exist and is using background cache. Skip model generation...
-        return True
-    else:
-        # Doesn't exist background cache...
-        return False
-        
-        
-        
-        
-def retrieve_prediction_cache(CACHE, content, prediction):
-    is_background = "background_query" in content
-    
-    session_id, EXIST_CACHE = check_have_cache(CACHE, content)
-    if EXIST_CACHE:
-        print(f"Find previous cache.")
-        if len(prediction) > 0:
-            # Further merge the predictions
-            merged_prediction = merge_predictions(prediction, CACHE[session_id]['prediction'])
-        else:
-            # No current prediction, directly use the old one. When querying the server and the server have a background cache, we use the cache without generating
-            merged_prediction = CACHE[session_id]['prediction']
-    else: # New
-        print(f"No previous cache.")
-        merged_prediction = prediction
-    # Update the CACHE
-    update_prediction_cache(CACHE, content, merged_prediction, is_background = is_background)
-    return merged_prediction
 
 class ConstraintLogitsProcessor(LogitsProcessor):
     def __init__(self, hmm_model, hmm_config, temperature=1.0):

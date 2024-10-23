@@ -34,7 +34,7 @@ from parsing import (
     filter_suggestions,
     custom_filter_suggestions
 )
-from model_utils import (
+from backend_utils import (
     get_gpt_prompt,
     retrieve_prediction_cache,
     check_background_cache
