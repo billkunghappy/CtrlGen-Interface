@@ -50,7 +50,7 @@
   </head>
 
   <body>
-    <div id="header" data-toggle="tooltip" data-placement="bottom" title="Press tab to get suggestions from AI!">
+    <div id="header">
       <h1 class="header-font text-light">Ctr<span class="long-space">l&ndash;</span>G<i id='robot' class="fas fa-pen-nib"></i>
         <!-- <i style="background-image: url(icons/icons8-ctrl-96.png);" class="title_icon"></i>
         <i style="background-image: url(icons/icons8-g-key-96.png);" class="title_icon"></i> -->
@@ -91,7 +91,7 @@
           <span class="key" style="margin-right: 5px;">Tab</span>
           >> <span class="key" style="margin-right: 5px;">Esc</span>
           >> <span class="key" style="margin-right: 5px;">Tab</span> Upgrade suggestions<br/>
-        <span class="key">Shift</span> + <span class="key" style="margin-right: 5px;">Tab</span> Reopen suggestions
+        <!-- <span class="key">Shift</span> + <span class="key" style="margin-right: 5px;">Tab</span> Reopen suggestions -->
       </div>
     </div>
 
@@ -187,6 +187,17 @@
           </div>
           <!-- Our Control -->
           <hr class="mt-2 mb-3" id="sep-control" style="display: none;"/>
+          <!-- TODO: ADD display prompt -->
+          <!-- <div class="card card-body" style="margin-top: 2%;">
+            <div class="form-group row">
+              <label for="display-prompt" class="col-sm-12 col-form-label">Prompt:</label>
+            </div>
+            <div class="form-group row">
+              <div class="col-sm-12 ml-auto mr-0">
+                <textarea type="text" id="display-prompt" class="form-control" disabled></textarea>
+              </div>
+            </div>
+          </div> -->
           <div class="card card-body">
             <i class="bi bi-x-circle ctrl-panel-icon ctrl-token-status icon-remove" id="ctrl-icon-remove"></i>
             <i class="bi bi-check-circle ctrl-panel-icon ctrl-token-status icon-apply" id="ctrl-icon-apply" style="display: none;"></i>

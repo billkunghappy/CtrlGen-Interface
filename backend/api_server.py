@@ -4,8 +4,6 @@ Starts a Flask server that handles API requests from the frontend.
 
 import os
 import gc
-import shutil
-import random
 from openai import OpenAI
 import warnings
 import numpy as np
@@ -13,8 +11,6 @@ import json
 from time import time, sleep
 from argparse import ArgumentParser
 # For Local Model
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
 import string
 import threading
 
@@ -63,6 +59,10 @@ def start_session():
     print("start_session")
     content = request.json
     result = {}
+    if content is None:
+        result['status'] = FAILURE
+        result['message'] = 'Request content is missing.'
+        return jsonify(result)
 
     # Read latest prompts, examples, and access codes
     global examples, prompts
@@ -70,8 +70,7 @@ def start_session():
     prompts = read_prompts(config_dir)
     allowed_access_codes = read_access_codes(config_dir)
 
-    # Check access codes
-    access_code = content['accessCode']
+    access_code = content.get('accessCode')
     print(f"Get access code {access_code},allowed_access_codes: {allowed_access_codes}")
     if access_code not in allowed_access_codes:
         if not access_code:
@@ -300,7 +299,7 @@ def query():
                     model=engine,
                     prompt=prompt,
                     # suffix=suffix,
-                    n=args.num_beams*4,
+                    n=args.num_return_sequences,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
@@ -315,7 +314,7 @@ def query():
                         {"role": "system", "content": "You are a helpful writing assistant."},
                         {"role": "user", "content": prompt},
                     ],
-                    n=args.num_beams*4,
+                    n=args.num_return_sequences,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
@@ -385,8 +384,6 @@ def query():
                 # General Config.
                 # TODO: Some of them should be set to a fix value
                 'temperature': temperature, # Should be 0.8
-                'num_return_sequences': args.num_beams, # We will return all the generated results, and filter here
-                'num_beams': max(1, args.num_beams // len(token_constraint)),
                 'no_repeat_ngram_size': -1,
                 'top_p': top_p,
                 'token_constraint': token_constraint
@@ -525,7 +522,7 @@ def query():
                     suggestion = parse_suggestion(
                         choice_text,
                         results['after_prompt'],
-                        stop_rules=[]
+                        stop_rules= []
                     )
                     suggestions.append((suggestion, log_prob, engine))
 
@@ -608,7 +605,7 @@ def query():
             print(f"Error occurred at compute_similarity. The compute score should be between [0, 1] but instead get {similarity}")
             similarity = max(similarity, 0)
             similarity = min(similarity, 1)
-        return similarity
+        return min(similarity, 0.99)
 
     selected_texts = []
     similarity_threshold = args.similarity_threshold
@@ -622,9 +619,12 @@ def query():
     if UseBackgroundCache:
         # Further add the prev suggestions in the ref list
         additional_ref += [suggestion['original'] for suggestion in prev_suggestions]
+    selected_text_list = []
     while True:
         for suggestion in filtered_suggestions:
-            group_id = suggestion['group_id']
+            group_id = suggestion['group_id'] if len(trunc_len_list) > 1 else 0
+            if suggestion['text'].strip() in selected_text_list:
+                continue
             if suggestion['selected']:
                 continue
             if len(selected_texts) != 0 and any([compute_similarity(ref, suggestion['text']) >= similarity_threshold for ref in (selected_texts + additional_ref)]):
@@ -632,11 +632,16 @@ def query():
             if trunc_len_list_cnt[group_id] >= trunc_len_list[group_id]:
                 continue
             suggestion['selected'] = True
+            selected_text_list.append(suggestion['text'].strip())
             trunc_len_list_cnt[group_id] += 1
             selected_texts.append(suggestion['text'])
         if trunc_len_list_cnt == trunc_len_list:
             break
         similarity_threshold += 0.1
+        # When we still can't find enough suggestions, we will relax the group_id(token_range)
+        if similarity_threshold >= 1:
+            trunc_len_list_cnt = [sum(trunc_len_list_cnt)]
+            trunc_len_list = [sum(trunc_len_list)]
         if similarity_threshold > 1.09:
             break
         # print(trunc_len_list_cnt)
@@ -761,7 +766,7 @@ if __name__ == '__main__':
                         default="../config/model_ports.txt",
                         help="Specify the local model port file. In this file, each line should have a number, which is the port. Should be specify together with local_model_server_port")
     # Optional arguments
-    parser.add_argument('--num_beams', type=int, default = 16, help = "The beam size or the number of returned samples for local model.")
+    parser.add_argument('--num_return_sequences', type=int, default = 16, help = "The total sample sequence num for GPT. Local models' num_return_sequences is set in the model_server.py arg: generation_batch_size")
     parser.add_argument('--similarity_threshold', type=float, default=0.3, help="The similarity threshold for controlling diversity, range between 0 and 1, the lower the value the more diverse.")
     parser.add_argument('--replay_dir', type=str, default='../logs')
 

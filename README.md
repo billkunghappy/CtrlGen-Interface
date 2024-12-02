@@ -2,7 +2,7 @@
 
 <img src="./Ctrl-G-Logo.png" width="350px"/>
 
-**Placeholder**
+**Adaptable Logical Control for Large Language Models**
 
 </div>
 
@@ -47,6 +47,13 @@ Inside the `ctrl-g-interface` directory, run the following to install the requir
 
 ```
 pip install -r requirements.txt
+```
+
+Install `ctrl-g` as a package.
+
+```
+git clone https://github.com/joshuacnf/Ctrl-G.git
+pip install -e .
 ```
 
 **2. Start all the servers**
@@ -99,6 +106,7 @@ CUDA_VISIBLE_DEVICES=${CUDA} python3 model_server.py \
     --port ${PORT} \
     --llama_model_path $MODEL \
     --hmm_model_path $HMM_MODEL \
+    --generation_batch_size 128 \
     --suffix_cap 32
 ```
 
@@ -133,6 +141,7 @@ printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
             --llama_model_path $MODEL \
             --hmm_model_path $HMM_MODEL \
             --suffix_cap 32 \
+            --generation_batch_size 128 \
             &
     done
     wait
@@ -143,6 +152,7 @@ printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
 **1. `--suffix_cap`:** When inserting in a long document, sometimes the suffix can be very long, which might effect the insertion quality. Specify this argument to truncate it into a specified token length.
 **2. `--llama_only`:** When specified, only use the language model without the attatched HMM. This argument will usually combine with `--llama_insertion`.
 **3. `--llama_insertion`:** When specified, provide the suffix to the language model. For Ctrl-G, since HMM will process the suffix, the language model does not see the suffix.
+**4. `--generation_batch_size`:** The number of suggestions to return per GPU. Higher generation batch size will lead to better performance. (With higher GPU memory usages)
 
 ---
 
@@ -219,10 +229,10 @@ const frontendURL = 'http://127.0.0.1:8000'
 Now, you can access the frontend server on your browser as follows:
 
 ```
-FRONTEND_URL/index.html?access_code=ACCESS_CODE
+FRONTEND_URL/index.html?ctrl=show&access_code=ACCESS_CODE&engine=ENGINE
 ```
 
-where `FRONTEND_URL` is the URL of the frontend server (e.g. `http://127.0.0.1:8000`) and `ACCESS_CODE` is one of the access codes you defined in `./config/access_codes.csv`. If you have followed the instructions above, you should be able to access the frontend at [here](http://127.0.0.1:8000/index.html?access_code=demo):
+where `FRONTEND_URL` is the URL of the frontend server (e.g. `http://127.0.0.1:8000`) and `ACCESS_CODE` is one of the access codes you defined in `./config/access_codes.csv`. The `ENGINE` is the AI model to use. If using OpenAI models, directly specify the model name such as `engine=gpt-3.5-turbo-instruct`. If you have started the local model server (Ctrl-G models), specify `engine=local` to query the `model_server.py`. If you have followed the instructions above, you should be able to access the frontend at [here](http://127.0.0.1:8000/index.html?access_code=demo):
 
 ```
 http://127.0.0.1:8000/index.html?access_code=demo
@@ -232,13 +242,13 @@ http://127.0.0.1:8000/index.html?access_code=demo
 
 - **Get suggestions from AI**: While writing in the text editor, press the `tab` key whenever you want to get suggestions. You can get suggestions multiple times in a row if you want more; you can navigate the suggestions using `arrow` keys and press the `enter` key to select a suggestion; to reopen the previous suggestions, press the `shift` key and `tab` key at the same time.
 - **Save your writing session**: If you want to save the writing session (to share it with others or to replay it later), press the "Save your work" button on the bottom of the page and save the `SESSION_ID` you get; otherwise, your session will not be saved.
-- **Replay your writing session**: To view the replay of your writing session, you can access it at `FRONTEND_URL/replay.html?session_id=SESSION_ID` where `FRONTEND_URL` is the URL of the frontend server and `SESSION_ID` is the session ID you received when you saved your writing session.
+<!-- - **Replay your writing session**: To view the replay of your writing session, you can access it at `FRONTEND_URL/replay.html?session_id=SESSION_ID` where `FRONTEND_URL` is the URL of the frontend server and `SESSION_ID` is the session ID you received when you saved your writing session. -->
 
-<div align="center">
+<!-- <div align="center">
 
 <img src="https://p-lambda.github.io/coauthor/assets/images/pig_0.75_clip.gif" width="500px"/>
 
-</div>
+</div> -->
 
 ---
 
@@ -254,19 +264,9 @@ To start the writing assistant, you need to start frontend, backend, and the mod
 * Backend: `cd backend`, `sh start_backend.sh`
 * Model: `cd backend`, `sh start_model.sh` 
 
-And to launch the server with the control panel, you can go to:
-`http://${URL}:${PORT}/index.html?access_code=demo&ctrl=show`
-For example for `pluslab01-a100`, it is
-`http://131.179.88.55:8000/index.html?access_code=demo&ctrl=show&engine=gpt-3.5-turbo-instruct`
-
-**TODO**
+<!-- **TODO**
 ### FIX:
-1. GPT max `n` is now 128. Current beam size for GPT uses the arg.beam * 4. We might need to fix it to let it be set in a more trivial way.
-2. Current local models has the version error when update transformer version.
-3. The interface error message is quite intrivial. Might need to fix this part.
-4. Check whether the background query still works
+1. The interface error message is quite intrivial. Might need to fix this part.
 
 ### Upgrade:
-1. Add an example prompt when the user changed the constraints
-2. Unify the style of the interface
-3. Check the font license
+1. Add an example prompt when the user changed the constraints -->
