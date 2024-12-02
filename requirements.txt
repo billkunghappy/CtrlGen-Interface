@@ -32,3 +32,4 @@ Werkzeug==2.2.3
 wheel==0.37.0
 yarl==1.9.1
 zipp==3.15.0
+flash-attn==2.7.0

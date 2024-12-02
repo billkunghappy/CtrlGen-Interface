@@ -8,3 +8,4 @@ backend/start_backend.sh
 backend/start_model.sh
 backend/*/*.json
 backend/*/*.csv
+.vscode/*

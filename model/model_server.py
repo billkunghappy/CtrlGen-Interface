@@ -5,23 +5,25 @@ Starts a Flask server that response with the local model
 from flask import Flask, render_template, request
 import argparse
 import os
-
+import warnings
 from tqdm import tqdm
 import torch
-from transformers import LlamaForCausalLM, LlamaTokenizer
+import ctrlg
+from transformers import AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
 from transformers import NoRepeatNGramLogitsProcessor
 from transformers import BeamSearchScorer, LogitsProcessorList, LogitsProcessor, StoppingCriteriaList, StoppingCriteria, MaxLengthCriteria
 
-from HMM.hmm_model import *
-from HMM.DFA_model import *
 from model_utils import (
     encode_with_messages_format,
-    hash_hmm_status,
+    # hash_hmm_status,
     get_prefix_suffix_tokens_for_HMM,
     get_sequence_scores,
-    ConstraintLogitsProcessor,
     SuffixNoRepeatNGramLogitsProcessor,
     get_operation
+)
+from DFA_utils import (
+    TrivialBuilder,
+    EndSentenceBuilder
 )
 
 app = Flask(__name__)
@@ -49,8 +51,9 @@ def prompt_(input_json):
     )
     # Get the constraints
     token_constraint, word_constraint, keyword_constraint, banword_constraint = input_json["token_constraint"], input_json["word_constraint"], input_json["keyword_constraint"], input_json["banword_constraint"]
-    max_tokens = max([token_range[1] for token_range in token_constraint])
     num_token_ranges = len(token_constraint)
+    min_new_tokens = token_constraint[0][0]
+    max_new_tokens = token_constraint[0][1]
 
     # Get generation config
     temperature = input_json['temperature']
@@ -59,31 +62,62 @@ def prompt_(input_json):
     top_p = input_json['top_p']
 
     # TODO Maybe we should let model_server decide token_constraint based on word_constraint?
-    if len(word_constraint) != 0:
-        max_tokens = max(max_tokens, int(1.5 * word_constraint[1]))
+    # if len(word_constraint) != 0:
+    #     max_tokens = max(max_tokens, int(1.5 * word_constraint[1]))
 
     # Get prefix, suffix tokens for HMM
     prefix_tokens, suffix_tokens = get_prefix_suffix_tokens_for_HMM(Prefix, Suffix, tokenizer)
     suffix_tokens = suffix_tokens[:args.suffix_cap]
+    # Remove the following deprected code
     # Construct DFA graph
+    # dfa_graphs = []
+    # if len(banword_constraint) != 0:
+    #     print('Build Banword')
+    #     dfa_graphs.append(banphrase_builder.build(banword_constraint))
+    # if len(keyword_constraint) != 0:
+    #     print("Build Keyword")
+    #     dfa_graphs.append(keyphrase_builder.build(keyword_constraint))
+    # if len(word_constraint) != 0:
+    #     print("Build Word Length")
+    #     dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
+    # if Suffix == '':
+    #     print("Build End of Sentence")
+    #     dfa_graphs.append(end_sentence_builder.build())
+
+    # if dfa_graphs != []:
+    #     dfa_model = DFAModel(DFA_prod(dfa_graphs, mode='intersection'))
+    # else:
+    #     dfa_model = DFAModel(trivial_builder.build())
+    
+    # Add
     dfa_graphs = []
-    if len(banword_constraint) != 0:
-        print('Build Banword')
-        dfa_graphs.append(banphrase_builder.build(banword_constraint))
+    
+    # Build Keyphrases
     if len(keyword_constraint) != 0:
         print("Build Keyword")
-        dfa_graphs.append(keyphrase_builder.build(keyword_constraint))
+        for keyphrase in keyword_constraint:
+            patterns = [tokenizer.encode(x) for x in keyphrase]
+            dfa_graphs.append(ac_builder.build(patterns))
+        dfa_graphs.append(ctrlg.DFA_concatenate(dfa_graphs)) # concatenate the patterns so they appear in the given order
+    
+    # WordCount Builder
     if len(word_constraint) != 0:
         print("Build Word Length")
         dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
+    
+    # EndSentence Builder
+    # This can imporve performance when doing continuation. We expect the continuation should end with a endSentence token, such as period.
     if Suffix == '':
         print("Build End of Sentence")
         dfa_graphs.append(end_sentence_builder.build())
-
+    
+    # If there is no constraints, use trivial builder
     if dfa_graphs != []:
-        dfa_model = DFAModel(DFA_prod(dfa_graphs, mode='intersection'))
+        dfa_graph = ctrlg.DFA_prod(dfa_graphs, mode='intersection') # logical and
+        dfa_model = ctrlg.DFAModel(dfa_graph, vocab_size).to(device) # compile for GPU inference
     else:
-        dfa_model = DFAModel(trivial_builder.build())
+        dfa_model = ctrlg.DFAModel(trivial_builder.build(), vocab_size).to(device)
+        
 
     # Get input_ids
     if args.llama_only:
@@ -104,6 +138,7 @@ def prompt_(input_json):
     input_ids = torch.tensor([prompt_tokens] * (num_beams*num_token_ranges), device=device)
 
     with torch.no_grad():
+        # Cache past_key_values for faster inference
         global kv_cache
         global hmm_status
 
@@ -118,67 +153,88 @@ def prompt_(input_json):
         past_key_values = tuple([tuple([col.expand(num_beams*num_token_ranges, -1, -1, -1).contiguous()
             for col in row]) for row in past_key_values])
 
-        current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
-            token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
-        if not args.llama_only:
-            if current_hmm_status != hmm_status:
-                hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
-                    token_constraint, dfa_model)
-                hmm_status = current_hmm_status
-            else:
-                print('cache hit!')
+        # current_hmm_status = hash_hmm_status(prefix_tokens, suffix_tokens,
+        #     token_constraint, word_constraint, keyword_constraint, banword_constraint, Suffix)
+        # if not args.llama_only:
+        #     if current_hmm_status != hmm_status:
+        #         hmm_model.initialize_cache(prefix_tokens, suffix_tokens,
+        #             token_constraint, dfa_model)
+        #         hmm_status = current_hmm_status
+        #     else:
+        #         print('cache hit!')
 
         model_kwargs = {
             'past_key_values': past_key_values,
         }
 
-        hmm_token_ranges = [token_range for token_range in token_constraint for _ in range(num_beams)]
+        # hmm_token_ranges = [token_range for token_range in token_constraint for _ in range(num_beams)]
 
-        hmm_config = {
-            'hmm_prompt_len': len(prompt_tokens),
-            'hmm_prefix': prefix_tokens,
-            'hmm_suffix': suffix_tokens,
-            'hmm_generation_offset': len(prefix_tokens),
-            'hmm_token_ranges': hmm_token_ranges,
-            # 'hmm_batch_size': args.hmm_batch_size,
-            'hmm_batch_size': num_beams*num_token_ranges, # We directly use the num_beams as the HMM batch size, to make sure that the llama and Hmm model have the same batch size
-        }
+        # hmm_config = {
+        #     'hmm_prompt_len': len(prompt_tokens),
+        #     'hmm_prefix': prefix_tokens,
+        #     'hmm_suffix': suffix_tokens,
+        #     'hmm_generation_offset': len(prefix_tokens),
+        #     'hmm_token_ranges': hmm_token_ranges,
+        #     # 'hmm_batch_size': args.hmm_batch_size,
+        #     'hmm_batch_size': num_beams*num_token_ranges, # We directly use the num_beams as the HMM batch size, to make sure that the llama and Hmm model have the same batch size
+        # }
 
-        stopping_criteria = StoppingCriteriaList([
-            MaxLengthCriteria(max_length=len(prompt_tokens)+max_tokens)])
+        # Use only llama
         if args.llama_only: 
-            # Use only llama
             print("-------------------- Only use llama without using HMM --------------------")
             logits_processor = LogitsProcessorList([])
-        else:            
-            logits_processor = LogitsProcessorList([
-            ConstraintLogitsProcessor(hmm_model, hmm_config, temperature=temperature)])
+        else:
+            # Get token range
+            if len(set(tuple(elem) for elem in token_constraint)) > 1:
+                warnings.warn("Warning: Deprecated features of token ranges in the model server. Please use only one token range.")
+            # initialze the constraints logits processor & pre-computes conditional probabilities
+            
+            constraint_logits_processor = ctrlg.ConstraintLogitsProcessor(
+                hmm_model, dfa_model,
+                min_new_tokens, max_new_tokens,
+                prompt_tokens, prefix_ids=prefix_tokens, suffix_ids=suffix_tokens)
+
+            logits_processor = LogitsProcessorList([constraint_logits_processor])
         if no_repeat_ngram_size > 0:
             logits_processor.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if args.suffix_no_repeat_ngram_size > 0:
             logits_processor.append(SuffixNoRepeatNGramLogitsProcessor(len(prompt_tokens), suffix_tokens, args.suffix_no_repeat_ngram_size))
 
-        # If use beam search
+        # Start generating.
+        generation_kwargs = {
+            'num_return_sequences': 1,
+            'logits_processor': logits_processor,
+            'min_new_tokens': min_new_tokens,
+            'max_new_tokens': max_new_tokens,
+            'pad_token_id': tokenizer.eos_token_id
+        }
         if args.do_beam_search:
-            print("Do beam search")
-            beam_scorer = BeamSearchScorer(
-                batch_size=1,
+            outputs= llama_model.generate(
+                input_ids=input_ids,
+                do_sample=False,
                 num_beams=num_beams,
-                num_beam_hyps_to_keep=num_beams,
-                device=llama_model.device,
-            )
-            outputs= llama_model.beam_search(
-                input_ids,
-                beam_scorer,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                **generation_kwargs,
                 **model_kwargs
             )
-        else:
-            outputs= llama_model.sample(
-                input_ids,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+            # beam_scorer = BeamSearchScorer(
+            #     batch_size=1,
+            #     num_beams=num_beams,
+            #     num_beam_hyps_to_keep=num_beams,
+            #     device=llama_model.device,
+            # )
+            # outputs= llama_model.beam_search(
+            #     input_ids,
+            #     beam_scorer,
+            #     logits_processor=logits_processor,
+            #     stopping_criteria=stopping_criteria,
+            #     **model_kwargs
+            # )
+        else: # Do Sample
+            outputs= llama_model.generate(
+                input_ids=input_ids,
+                do_sample=True,
+                num_beams=1,
+                **generation_kwargs,
                 **model_kwargs
             )
 
@@ -241,13 +297,13 @@ def prompt_(input_json):
 
         print(results)
     if args.eval:
-        # Clear cache everytime
+        # Clear cache everytime for evaluation
         del kv_cache
         kv_cache = {}
-        del hmm_status
-        hmm_status = None
-        del hmm_model.cache
-        hmm_model.cache = {}
+        # del hmm_status
+        # hmm_status = None
+        # del hmm_model.cache
+        # hmm_model.cache = {}
         torch.cuda.empty_cache()
     
     return results
@@ -282,28 +338,38 @@ def load_models():
     global tokenizer
     global llama_model
     global hmm_model
-    global keyphrase_builder
-    global banphrase_builder
+    # global keyphrase_builder
+    # global banphrase_builder
     global end_sentence_builder
-    global word_count_builder
+    # global word_count_builder
     global trivial_builder
+    global vocab_size
+    global ac_builder
+    global word_count_builder
     try:
         print(f'loading llama2 from {args.llama_model_path} ...')
-        llama_model = LlamaForCausalLM.from_pretrained(args.llama_model_path).to(device)
-        llama_model.half()
-        tokenizer = LlamaTokenizer.from_pretrained(args.llama_model_path)
-
+        llama_model = AutoModelForCausalLM.from_pretrained(args.llama_model_path).to(device)
+        llama_model.half().eval()
+        tokenizer = AutoTokenizer.from_pretrained(args.llama_model_path)
+        os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+        
         print(f'loading hmm from {args.hmm_model_path} ...')
-        hmm_model = HMM.from_pretrained(args.hmm_model_path)
+        hmm_model = ctrlg.HMM.from_pretrained(args.hmm_model_path).to(device)
         hmm_model.to(device)
         print(hmm_model.alpha_exp.device)
 
         print(f'constructing DFA builders ...')
-        keyphrase_builder = KeyphraseBuilder(tokenizer, 32000)
-        banphrase_builder = BanphraseBuilder(tokenizer, 32000)
+        # Remove the following lines to avoid loading the DFA builders
+        # keyphrase_builder = KeyphraseBuilder(tokenizer, 32000)
+        # banphrase_builder = BanphraseBuilder(tokenizer, 32000)
         end_sentence_builder = EndSentenceBuilder(tokenizer, 32000)
-        word_count_builder = WordCountBuilder(tokenizer, 32000)
+        # word_count_builder = WordCountBuilder(tokenizer, 32000)
         trivial_builder = TrivialBuilder(tokenizer, 32000)
+        
+        # Add
+        vocab_size = hmm_model.vocab_size
+        ac_builder = ctrlg.AhoCorasickBuilder(vocab_size)
+        word_count_builder = ctrlg.WordCountBuilder(tokenizer, vocab_size)
     except Exception as e:
         print(f"Cannot Load LLamaModel {args.llama_model_path} or HMM Model {args.hmm_model_path} because of the following exception:\n")
         raise e

@@ -1,7 +1,6 @@
-from HMM.hmm_model import *
+# from model.HMM.hmm_model_old import *
 from transformers import LogitsProcessor
 import torch
-import json
 import string
 
 def get_operation(prefix, prior, suffix, llama_insertion = False):
@@ -78,7 +77,7 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
     if len(prefix_tokens) > 0:
         if prefix_tokens[-1] == 29871:
             prefix_tokens = prefix_tokens[:-1]
-    prefix_tokens = tuple(prefix_tokens)
+    prefix_tokens = list(prefix_tokens)
 
     if suffix.strip() != '':
         # Cannot strip the suffix at the start. Need to keep the \n
@@ -91,10 +90,10 @@ def get_prefix_suffix_tokens_for_HMM(prefix, suffix, tokenizer):
             suffix_tokens = tokenizer.encode(suffix.rstrip(' '))[1:]
         if suffix_tokens[0] == 29871:
             suffix_tokens = suffix_tokens[1:]
-        suffix_tokens = tuple(suffix_tokens + [2])
+        suffix_tokens = list(suffix_tokens + [2])
     else:
         # suffix_tokens = tuple([2])
-        suffix_tokens = tuple([29889])
+        suffix_tokens = list([29889])
     return prefix_tokens, suffix_tokens
 
 
@@ -135,47 +134,47 @@ def get_sequence_scores(llama_model, output_ids,
     return scores1, scores2
 
 
-class ConstraintLogitsProcessor(LogitsProcessor):
-    def __init__(self, hmm_model, hmm_config, temperature=1.0):
-        self.hmm_model = hmm_model
-        self.hmm_config = hmm_config
-        self.temperature = temperature
+# class ConstraintLogitsProcessor(LogitsProcessor):
+#     def __init__(self, hmm_model, hmm_config, temperature=1.0):
+#         self.hmm_model = hmm_model
+#         self.hmm_config = hmm_config
+#         self.temperature = temperature
 
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        eos_token_id, pad_token_id = 2, 0
-        hmm_prompt_len = self.hmm_config['hmm_prompt_len']
-        hmm_prefix = self.hmm_config['hmm_prefix']
-        hmm_suffix = self.hmm_config['hmm_suffix']
-        hmm_generation_offset = self.hmm_config['hmm_generation_offset']
-        hmm_token_ranges = self.hmm_config['hmm_token_ranges']
-        hmm_batch_size = self.hmm_config['hmm_batch_size']
+#     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+#         eos_token_id, pad_token_id = 2, 0
+#         hmm_prompt_len = self.hmm_config['hmm_prompt_len']
+#         hmm_prefix = self.hmm_config['hmm_prefix']
+#         hmm_suffix = self.hmm_config['hmm_suffix']
+#         hmm_generation_offset = self.hmm_config['hmm_generation_offset']
+#         hmm_token_ranges = self.hmm_config['hmm_token_ranges']
+#         hmm_batch_size = self.hmm_config['hmm_batch_size']
 
-        prefixes = [tuple(hmm_prefix) + tuple(prefix)
-            for prefix in input_ids[:,hmm_prompt_len:].tolist()]
+#         prefixes = [tuple(hmm_prefix) + tuple(prefix)
+#             for prefix in input_ids[:,hmm_prompt_len:].tolist()]
 
-        if len(prefixes[0]) > 0:
-            selected_idx = [i for i, prefix in enumerate(prefixes)
-                if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
-        else:
-            selected_idx = [i for i, _ in enumerate(prefixes)]
-        selected_prefixes = [prefixes[i] for i in selected_idx]
-        selected_token_ranges = [hmm_token_ranges[i] for i in selected_idx]
+#         if len(prefixes[0]) > 0:
+#             selected_idx = [i for i, prefix in enumerate(prefixes)
+#                 if prefix[-1] != eos_token_id and prefix[-1] != pad_token_id]
+#         else:
+#             selected_idx = [i for i, _ in enumerate(prefixes)]
+#         selected_prefixes = [prefixes[i] for i in selected_idx]
+#         selected_token_ranges = [hmm_token_ranges[i] for i in selected_idx]
 
-        hmm_logits, hmm_logits_ = self.hmm_model.compute_logits(
-            selected_prefixes, hmm_suffix,
-            hmm_generation_offset,
-            selected_token_ranges,
-            batch_size=hmm_batch_size)
+#         hmm_logits, hmm_logits_ = self.hmm_model.compute_logits(
+#             selected_prefixes, hmm_suffix,
+#             hmm_generation_offset,
+#             selected_token_ranges,
+#             batch_size=hmm_batch_size)
 
-        hmm_logits -= hmm_logits_
-        hmm_logits = torch.cat((hmm_logits, -1e30 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
-        logits = torch.log_softmax(scores, dim=-1)
-        logits[selected_idx, :] += hmm_logits
-        logits = torch.log_softmax(logits, dim=-1)
-        logits = torch.log_softmax(logits / self.temperature, dim=-1)
+#         hmm_logits -= hmm_logits_
+#         hmm_logits = torch.cat((hmm_logits, -1e30 * torch.ones((hmm_logits.shape[0], 1), device=scores.device)), dim=1)
+#         logits = torch.log_softmax(scores, dim=-1)
+#         logits[selected_idx, :] += hmm_logits
+#         logits = torch.log_softmax(logits, dim=-1)
+#         logits = torch.log_softmax(logits / self.temperature, dim=-1)
 
-        return logits
+#         return logits
 
 
 class SuffixNoRepeatNGramLogitsProcessor(LogitsProcessor):
