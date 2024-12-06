@@ -76,7 +76,7 @@ def prompt_(input_json):
     if len(keyword_constraint) != 0:
         print("Build Keyword")
         for keyphrase in keyword_constraint:
-            dfa_graphs.append(ac_builder.build([tokenizer.encode(keyphrase)]))
+            dfa_graphs.append(ac_builder.build([tokenizer.encode(keyphrase)[1:]]))
         dfa_graphs = [ctrlg.DFA_concatenate(dfa_graphs)]
     
     # WordCount Builder
