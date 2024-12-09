@@ -53,6 +53,7 @@ Install `ctrl-g` as a package.
 
 ```
 git clone https://github.com/joshuacnf/Ctrl-G.git
+cd Ctrl-G/
 pip install -e .
 ```
 
