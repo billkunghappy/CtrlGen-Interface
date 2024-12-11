@@ -30,8 +30,7 @@ hmm_status = None
 @app.route('/prompt/',methods=['POST'])
 def prompt():
     # Get the text and operation
-    input_json = request.json
-    print(input_json)
+    input_json = request.json    
     return prompt_(input_json)
 
 
@@ -81,7 +80,7 @@ def prompt_(input_json):
     
     # WordCount Builder
     if len(word_constraint) != 0:
-        print("Build Word Length")
+        print("Build Word Count")
         dfa_graphs.append(word_count_builder.build(word_constraint[0], word_constraint[1]))
     
     # EndSentence Builder
@@ -125,8 +124,7 @@ def prompt_(input_json):
         if tuple(prompt_tokens) not in kv_cache:
             past_key_values = llama_model(torch.tensor([prompt_tokens[:-1]], device=device)).past_key_values
             kv_cache = {tuple(prompt_tokens): past_key_values}
-        else:
-            print('cache hit!', real_generation_batch_size)
+        else:            
             past_key_values = kv_cache[tuple(prompt_tokens)]
 
         # expand past_key_values to match the desired batch size
@@ -244,8 +242,7 @@ def prompt_(input_json):
                 "beam_outputs_sequences_scores_generation": [generation_scores[i * num_beams + j] for j in range(0, num_beams)],
                 "beam_outputs_sequences_scores_suffix": [suffix_scores[i * num_beams + j] for j in range(0, num_beams)],
             })
-
-        print(results)
+        
     if args.eval:
         # Clear cache everytime for evaluation
         del kv_cache
@@ -302,8 +299,7 @@ def load_models():
         
         print(f'loading hmm from {args.hmm_model_path} ...')
         hmm_model = ctrlg.HMM.from_pretrained(args.hmm_model_path).to(device)
-        hmm_model.to(device)
-        print("Hmm device:", hmm_model.alpha_exp.device)
+        hmm_model.to(device)        
 
         print(f'constructing DFA builders ...')
         vocab_size = hmm_model.vocab_size

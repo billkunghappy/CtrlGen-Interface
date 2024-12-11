@@ -57,6 +57,7 @@ FAILURE = False
 @cross_origin(origin='*')
 def start_session():
     print("start_session")
+    print('!!!!!!')
     content = request.json
     result = {}
     if content is None:
@@ -175,7 +176,7 @@ def query():
     domain = content['domain']
     prev_suggestions = content['suggestions']
     UseBackgroundCache = False
-    
+
     # This is an async function within the same session
     print(f"Try to acquire key for session: {session_id}")
     SESSIONS[session_id]['lock'].acquire()
@@ -334,7 +335,7 @@ def query():
                         "text": choice.message.content,
                         "logprobs": sum([choice.logprob for choice in choice.logprobs.content])
                     })
-                
+
             suggestions = []
             for choice in all_choices:
                 # print(f"#{choice['text']}#")
@@ -466,7 +467,7 @@ def query():
                 # print("Gathered Results:", all_token_range_output)
                 # Check Previous Cache
                 all_token_range_output = retrieve_prediction_cache(
-                    CACHE = PRED_CACHE, 
+                    CACHE = PRED_CACHE,
                     content = content,
                     prediction = all_token_range_output
                 )
@@ -610,7 +611,7 @@ def query():
     selected_texts = []
     similarity_threshold = args.similarity_threshold
     trunc_len_list_cnt = [0] * len(trunc_len_list)
-    # take iterations to select suggestions, prioritizing diversity. 
+    # take iterations to select suggestions, prioritizing diversity.
     if selected.strip() != "": # Rewriting, Set a high similarity threshold
         similarity_threshold = 0.8
         print("Doing rewriting, don't apply diversity filtering.")
@@ -646,7 +647,7 @@ def query():
             break
         # print(trunc_len_list_cnt)
         # print(similarity_threshold)
-    
+
     # Add None suggestions to the list if not empty, to make sure the interface to show properly
     num_selected_suggestions = sum([1 for suggestion in filtered_suggestions if suggestion['selected']])
     if num_selected_suggestions > 0 and num_selected_suggestions < n:
@@ -657,8 +658,8 @@ def query():
             'source': 'None'
         }] * (n - num_selected_suggestions)
         print(f"Not enough suggestions (got {n - num_selected_suggestions} but need {n})... Fill in empty suggestions.")
-    
-    
+
+
     # gather result
     original_suggestions_sorted = original_suggestions
     suggestions_with_probabilities = []
@@ -814,10 +815,13 @@ if __name__ == '__main__':
             f.write('')
 
     # Read and set API keys
-    global api_keys
-    api_keys = read_api_keys(config_dir)
-    global client
-    client = OpenAI(api_key= api_keys[('openai', 'default')])
+    try:
+        global api_keys
+        api_keys = read_api_keys(config_dir)
+        global client
+        client = OpenAI(api_key= api_keys[('openai', 'default')])
+    except Exception as e:
+        print(f'Unable to connect to OpenAI API')
 
     # Read examples (hidden prompts), prompts, and a blocklist
     global examples, prompts, blocklist
