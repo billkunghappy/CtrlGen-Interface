@@ -43,7 +43,7 @@ First clone this repository in any directory.
 ```
 git clone https://github.com/???
 ```
-Inside the `ctrl-g-interface` directory, run the following to install the required packages:
+Run the following command to install the required packages:
 
 ```
 pip install -r requirements.txt
@@ -86,74 +86,10 @@ This model includes a 7B llama2 models with a HMM, which should be able to run u
 > Note: You do not need to download them explicitly. You can directly input the name as argument to `model/model_server.py`.
 
 **2. Start the model server**
-Enter the `model` directory.
+
 ```
-cd ctrl-g-interface/model
+bash scripts/start_model_server.sh
 ```
-**Run the model server with *Single GPU*** by typing the following command:
-```bash
-# Setup arguments. For single GPU, please only provide one GPU index to CUDA argument
-export CUDA=0
-export PORT=8400
-export MODEL="ctrlg/tulu2-7b_writing-prompts"
-export HMM_MODEL="ctrlg/hmm_tulu2-7b_writing-prompts_32768"
-
-# Write the port into `../config/model_ports.txt`.
-# -- Backend server will query the model server based on this txt file.
-printf "%s\n" "${PORT}" > ../config/model_ports.txt
-
-# Start the model server
-CUDA_VISIBLE_DEVICES=${CUDA} python3 model_server.py \
-    --port ${PORT} \
-    --llama_model_path $MODEL \
-    --hmm_model_path $HMM_MODEL \
-    --generation_batch_size 128 \
-    --suffix_cap 32
-```
-
-**Run the model server with *Multiple GPUs*** by typing the following command:
-```bash
-# Setup arguments. For multiple GPU, specify the GPUs in a list. 
-# PORT_START specifies the http port we're using. For n GPUs, we will use the port from PORT_START to PORT_START + n.
-export GPUS=( 0 1 )
-export PORT_START=8400
-export MODEL="ctrlg/tulu2-7b_writing-prompts"
-export HMM_MODEL="ctrlg/hmm_tulu2-7b_writing-prompts_32768"
-
-PORT_LIST=()
-
-# Get the ports for each GPU process
-for GPU in "${GPUS[@]}"; do
-    PORT_LIST+=($((PORT_START + GPU)))
-done
-
-# Write the port into `../config/model_ports.txt`.
-# -- Backend server will query the model server based on this txt file.
-printf "%s\n" "${PORT_LIST[@]}" > ../config/model_ports.txt
-
-# Setup multiple model servers backend. Each on a GPU.
-(
-    trap 'kill 0' SIGINT;
-    for i in "${!GPUS[@]}"
-    do
-        #Run in background
-        CUDA_VISIBLE_DEVICES=${GPUS[i]} python3 model_server.py \
-            --port ${PORT_LIST[i]} \
-            --llama_model_path $MODEL \
-            --hmm_model_path $HMM_MODEL \
-            --suffix_cap 32 \
-            --generation_batch_size 128 \
-            &
-    done
-    wait
-)
-```
-
-**Additional Arguments**
-**1. `--suffix_cap`:** When inserting in a long document, sometimes the suffix can be very long, which might effect the insertion quality. Specify this argument to truncate it into a specified token length.
-**2. `--llama_only`:** When specified, only use the language model without the attatched HMM. This argument will usually combine with `--llama_insertion`.
-**3. `--llama_insertion`:** When specified, provide the suffix to the language model. For Ctrl-G, since HMM will process the suffix, the language model does not see the suffix.
-**4. `--generation_batch_size`:** The number of suggestions to return per GPU. Higher generation batch size will lead to better performance. (With higher GPU memory usages)
 
 ---
 
