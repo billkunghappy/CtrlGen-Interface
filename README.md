@@ -83,7 +83,7 @@ We recommend using these two models:
 
 This model includes a 7B llama2 models with a HMM, which should be able to run under 40GB GPU memory. More model choices can be refer to [Ctrl-G Training Repo](https://github.com/joshuacnf/Ctrl-G?tab=readme-ov-file).
 
-> Note: You do not need to download them explicitly. You can directly input the name as argument to `model/model_server.py`.
+> Note: You do not need to download them explicitly. You can directly enter the name as argument to `model/model_server.py`.
 
 **2. Start the model server**
 
